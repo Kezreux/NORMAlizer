@@ -12,7 +12,7 @@ else()
     # e.g.  PYTHONPATH=build/windows-msvc/module/bindings/python/Release python -c "import flukenorma"
     add_custom_command(TARGET norma_py POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${FlukeNorma_SOURCE_DIR}/flukenorma"
+                "${FlukeNorma_SOURCE_DIR}/python/flukenorma"
                 "$<TARGET_FILE_DIR:norma_py>/flukenorma"
         COMMAND ${CMAKE_COMMAND} -E copy
                 "$<TARGET_FILE:norma_py>"

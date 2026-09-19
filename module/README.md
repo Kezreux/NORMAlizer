@@ -20,7 +20,8 @@ fetched automatically, and hidden behind pimpl so consumers never see Asio heade
 ├── CMakeLists.txt               Top-level build (includes module/)
 ├── CMakePresets.json
 ├── pyproject.toml               pip install . (scikit-build-core)
-├── flukenorma/                  Typed, pythonic Python package (wraps flukenorma._core)
+├── python/
+│   └── flukenorma/              Typed, pythonic Python package (wraps flukenorma._core)
 └── module/
     ├── include/fluke/norma/     Public C++ headers
     │   ├── transport.hpp        Transport abstraction (TCP now; RS-232/USB possible later)

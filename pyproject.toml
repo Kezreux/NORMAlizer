@@ -22,7 +22,7 @@ classifiers = [
 [tool.scikit-build]
 minimum-version = "0.10"
 cmake.version = ">=3.24"
-wheel.packages = ["flukenorma"]
+wheel.packages = ["python/flukenorma"]
 
 [tool.scikit-build.cmake.define]
 NORMA_BUILD_TESTS = "OFF"
