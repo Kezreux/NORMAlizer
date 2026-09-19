@@ -13,6 +13,11 @@ wheelhouse/
 venv/
 _skbuild/
 
+# .NET
+bin/
+obj/
+*.user
+
 # IDE / editor
 .vs/
 .vscode/

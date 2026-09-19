@@ -1,0 +1,50 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:NORMAlizer.Desktop.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="650"
+        x:Class="NORMAlizer.Desktop.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="NORMAlizer"
+        Width="1000" Height="650">
+
+    <Design.DataContext>
+        <!-- This only sets the DataContext for the previewer in an IDE,
+             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
+        <vm:MainViewModel />
+    </Design.DataContext>
+
+    <DockPanel>
+
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_File">
+                <MenuItem Header="E_xit" Click="OnExitClick" />
+            </MenuItem>
+            <MenuItem Header="_Help">
+                <MenuItem Header="_About" IsEnabled="False" />
+            </MenuItem>
+        </Menu>
+
+        <Border DockPanel.Dock="Bottom"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                Padding="8,4">
+            <TextBlock Text="{Binding StatusText}" FontSize="12" />
+        </Border>
+
+        <!-- Placeholder content area: application views go here later. -->
+        <ContentControl>
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                <TextBlock Text="NORMAlizer"
+                           FontSize="28" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="Fluke NORMA 4000/5000 desktop shell"
+                           Opacity="0.6"
+                           HorizontalAlignment="Center" />
+            </StackPanel>
+        </ContentControl>
+
+    </DockPanel>
+
+</Window>

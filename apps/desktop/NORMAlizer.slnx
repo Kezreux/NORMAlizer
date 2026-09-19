@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/NORMAlizer.Core/NORMAlizer.Core.csproj" />
+    <Project Path="src/NORMAlizer.Desktop/NORMAlizer.Desktop.csproj" />
+    <Project Path="src/NORMAlizer.Interop/NORMAlizer.Interop.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/NORMAlizer.Core.Tests/NORMAlizer.Core.Tests.csproj" />
+  </Folder>
+</Solution>
