@@ -32,7 +32,7 @@ hentes automatisk, skjult bak pimpl så konsumenter aldri ser Asio-headere).
     ├── capi/                    C-ABI (fluke_norma_c.h + flukenorma_c delt bibliotek)
     ├── bindings/python/         pybind11-modul + flukenorma-pakken
     ├── examples/                C++- og Python-eksempler (identify, U/I/P-måling)
-    ├── tests/                   Catch2-enhetstester med skriptet mock-transport (ingen maskinvare)
+    ├── tests/                   Catch2-tester: enhetstester (mock-transport) + hardware-tester (ekte TCP)
     └── cmake/                   Avhengigheter (FetchContent) og pakke-eksport
 ```
 
@@ -67,6 +67,33 @@ ctest --preset linux
 CMake-opsjoner: `NORMA_BUILD_PYTHON`, `NORMA_BUILD_C_API`,
 `NORMA_BUILD_EXAMPLES`, `NORMA_BUILD_TESTS`, `NORMA_INSTALL` (alle `ON` som
 standard).
+
+### Hardware-tester (ekte instrument)
+
+`norma_hardware_tests` kjører mot et ekte NORMA 4000/5000 over TCP (ingen
+mock). Testene hopper over seg selv (Skipped) hvis `NORMA_HOST` ikke er satt,
+så en vanlig `ctest`-kjøring krever ikke instrument.
+
+```powershell
+# Windows
+$env:NORMA_HOST = "192.168.1.100"          # NORMA_PORT (23) og NORMA_TIMEOUT_MS (5000) er valgfrie
+ctest --preset windows-msvc -L hardware --output-on-failure
+
+# eller kjør binæren direkte:
+.\build\windows-msvc\module\tests\Release\norma_hardware_tests.exe
+```
+
+```bash
+# Linux
+NORMA_HOST=192.168.1.100 ctest --preset linux -L hardware --output-on-failure
+```
+
+Tester merket `[state]` rekonfigurerer instrumentet (`*RST`, `FUNC`, `APER`,
+...). Kjør kun de lesende testene med:
+
+```
+norma_hardware_tests "[hardware]~[state]"
+```
 
 ### Bruk fra et annet C++-prosjekt
 
