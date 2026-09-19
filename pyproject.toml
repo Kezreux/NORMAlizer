@@ -1,0 +1,31 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11>=3.0"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "flukenorma"
+version = "0.1.0"
+description = "Python bindings for the Fluke NORMA 4000/5000 TCP/SCPI remote-control wrapper"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["fluke", "norma", "scpi", "power-analyzer", "instrument", "tcp"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering",
+    "Topic :: System :: Hardware :: Hardware Drivers",
+]
+
+[tool.scikit-build]
+minimum-version = "0.10"
+cmake.version = ">=3.24"
+wheel.packages = ["module/bindings/python/flukenorma"]
+
+[tool.scikit-build.cmake.define]
+NORMA_BUILD_TESTS = "OFF"
+NORMA_BUILD_EXAMPLES = "OFF"
+NORMA_BUILD_C_API = "OFF"
+NORMA_INSTALL = "OFF"
