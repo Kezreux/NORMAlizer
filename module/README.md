@@ -20,6 +20,7 @@ fetched automatically, and hidden behind pimpl so consumers never see Asio heade
 ├── CMakeLists.txt               Top-level build (includes module/)
 ├── CMakePresets.json
 ├── pyproject.toml               pip install . (scikit-build-core)
+├── flukenorma/                  Typed, pythonic Python package (wraps flukenorma._core)
 └── module/
     ├── include/fluke/norma/     Public C++ headers
     │   ├── transport.hpp        Transport abstraction (TCP now; RS-232/USB possible later)
@@ -30,7 +31,7 @@ fetched automatically, and hidden behind pimpl so consumers never see Asio heade
     │   └── error.hpp            Error hierarchy (ConnectionError, TimeoutError, ScpiError, ...)
     ├── src/                     Core library implementation
     ├── capi/                    C ABI (fluke_norma_c.h + flukenorma_c shared library)
-    ├── bindings/python/         pybind11 module + flukenorma package
+    ├── bindings/python/         pybind11 extension (built as flukenorma._core)
     ├── examples/                C++ and Python examples (identify, U/I/P measurement)
     ├── tests/                   Catch2 tests: unit tests (mock transport) + hardware tests (real TCP)
     └── cmake/                   Dependencies (FetchContent) and package exports
@@ -134,13 +135,12 @@ pip install .          # builds the C++ core + pybind11 module via scikit-build-
 ```
 
 ```python
-import flukenorma as norma
+from flukenorma import Norma, fn
 
-with norma.Norma("192.168.1.100") as instrument:
+with Norma.connect("192.168.1.100") as instrument:
     print(instrument.identify())
     instrument.reset()
-    instrument.set_functions([norma.fn.voltage(1), norma.fn.current(1),
-                              norma.fn.active_power(1)])
+    instrument.functions = [fn.voltage(1), fn.current(1), fn.active_power(1)]
     instrument.set_continuous(True)
     print(instrument.data())
 ```

@@ -9,10 +9,10 @@ if(SKBUILD)
     install(TARGETS norma_py DESTINATION flukenorma)
 else()
     # Developer convenience: assemble an importable package in the build tree,
-    # e.g.  PYTHONPATH=build/windows-msvc/bindings/python/Release python -c "import flukenorma"
+    # e.g.  PYTHONPATH=build/windows-msvc/module/bindings/python/Release python -c "import flukenorma"
     add_custom_command(TARGET norma_py POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/flukenorma"
+                "${FlukeNorma_SOURCE_DIR}/flukenorma"
                 "$<TARGET_FILE_DIR:norma_py>/flukenorma"
         COMMAND ${CMAKE_COMMAND} -E copy
                 "$<TARGET_FILE:norma_py>"

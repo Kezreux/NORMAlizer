@@ -8,28 +8,27 @@ Usage: python simple_power_measurement.py [host]
 import sys
 import time
 
-import flukenorma as norma
+from flukenorma import Norma, WiringSystem, fn
 
 
 def main() -> int:
     host = sys.argv[1] if len(sys.argv) > 1 else "192.168.1.100"
 
-    with norma.Norma(host) as instrument:
+    with Norma.connect(host) as instrument:
         print(f"Connected to {instrument.identify().model}")
 
         instrument.reset()
-        instrument.set_wiring_system(norma.WiringSystem.THREE_WATTMETER)
+        instrument.wiring_system = WiringSystem.THREE_WATTMETER
         instrument.sync_to_voltage(1)
         instrument.set_voltage_range(1, 300.0)
         instrument.set_current_autorange(1)
-        instrument.set_aperture(1.0)  # averaging time: 1 s
+        instrument.aperture = 1.0  # averaging time: 1 s
 
-        functions = [
-            norma.fn.voltage(1),       # "VOLT1"
-            norma.fn.current(1),       # "CURR1"
-            norma.fn.active_power(1),  # "POW1:ACT"
+        instrument.functions = [
+            fn.voltage(1),       # "VOLT1"
+            fn.current(1),       # "CURR1"
+            fn.active_power(1),  # "POW1:ACT"
         ]
-        instrument.set_functions(functions)
         instrument.set_continuous(True)
         instrument.check_errors()  # raise early if the configuration was rejected
 
@@ -37,10 +36,9 @@ def main() -> int:
         # time to produce the first complete measurement.
         time.sleep(2.0)
 
-        reading = instrument.data_with_status(functions)
-        for name, value, status in zip(("U1 [V]", "I1 [A]", "P1 [W]"),
-                                       reading.values, reading.status):
-            print(f"{name:8s} {value:12.6g}  (status {status})")
+        reading = instrument.read()
+        for label, measurement in zip(("U1 [V]", "I1 [A]", "P1 [W]"), reading):
+            print(f"{label:8s} {measurement.value:12.6g}  (status {measurement.status!r})")
     return 0
 
 
