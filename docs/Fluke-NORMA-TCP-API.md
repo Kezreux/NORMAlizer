@@ -1,407 +1,407 @@
-# Fluke NORMA 4000/5000 – TCP/Socket API (fjernstyring)
+# Fluke NORMA 4000/5000 – TCP/Socket API (Remote Control)
 
-Dette dokumentet beskriver fjernstyrings-API-et for effektanalysatorene **Fluke NORMA 4000 og NORMA 5000**. Instrumentet fjernstyres med **SCPI 1999.0**-kommandoer (Standard Commands for Programmable Instruments) sendt som tekstlinjer over **TCP/IP** via Ethernet-grensesnittet, der TCP-porten er **fast satt til 23**. Nøyaktig samme kommandosett gjelder også for de øvrige grensesnittene RS-232, USB (virtuell COM-port) og GPIB (IEC/IEEE-buss) – bytter du transportlag, forblir kommandoene identiske.
+This document describes the remote control API for the **Fluke NORMA 4000 and NORMA 5000** power analyzers. The instrument is controlled remotely with **SCPI 1999.0** commands (Standard Commands for Programmable Instruments) sent as lines of text over **TCP/IP** via the Ethernet interface, where the TCP port is **fixed at 23**. Exactly the same command set applies to the other interfaces as well — RS-232, USB (virtual COM port) and GPIB (IEC/IEEE bus). If you change the transport layer, the commands remain identical.
 
-Dokumentet er satt sammen for å kunne brukes direkte som referanse når du utvikler en egen applikasjon (TCP-klient) som snakker med instrumentet.
+The document is assembled so that it can be used directly as a reference while developing your own application (a TCP client) that talks to the instrument.
 
-**Kilde:** Fluke NORMA 4000/5000 Remote Control Users Guide, juni 2007 Rev. 2, 5/12.
+**Source:** Fluke NORMA 4000/5000 Remote Control Users Guide, June 2007 Rev. 2, 5/12.
 
-> ## Kom raskt i gang
+> ## Quick start
 >
-> 1. Koble til instrumentets IP-adresse på **TCP-port 23** med en vanlig TCP-strømsocket (eller test med `telnet <ip> 23`). IP-adresse, subnettmaske og gateway konfigureres i instrumentets **General Setup**-skjermbilde.
-> 2. Send SCPI-kommandoer som ren ASCII-tekst, én kommandolinje om gangen, terminert med linjeskift `<LF>` (`\n`, 0Ah).
-> 3. For spørringer (kommandoer som slutter med `?`): les svaret tilbake som én tekstlinje avsluttet med `\n` (fjern eventuell `\r` foran).
-> 4. Test forbindelsen med `*IDN?` – instrumentet svarer f.eks. `Fluke,NORMA4000,KN34512BA,01.00`.
-> 5. Typisk måleoppsett: `*RST` → konfigurer (`ROUT:SYST`, `SYNC:SOUR`, områder, `APER`, `FUNC`) → `INIT:CONT ON` → hent verdier med `DATA?`.
-> 6. Komplette, gjenbrukbare klienteksempler (inkludert rå TCP-socket uten VISA) finnes i kapittelet [Programmeringseksempler](#programmeringseksempler).
+> 1. Connect to the instrument's IP address on **TCP port 23** with an ordinary TCP stream socket (or test with `telnet <ip> 23`). IP address, subnet mask and gateway are configured in the instrument's **General Setup** screen.
+> 2. Send SCPI commands as plain ASCII text, one command line at a time, terminated with a line feed `<LF>` (`\n`, 0Ah).
+> 3. For queries (commands ending in `?`): read the response back as a single line of text terminated with `\n` (strip any preceding `\r`).
+> 4. Test the connection with `*IDN?` — the instrument replies with, for example, `Fluke,NORMA4000,KN34512BA,01.00`.
+> 5. Typical measurement setup: `*RST` → configure (`ROUT:SYST`, `SYNC:SOUR`, ranges, `APER`, `FUNC`) → `INIT:CONT ON` → fetch values with `DATA?`.
+> 6. Complete, reusable client examples (including a raw TCP socket without VISA) are found in the [Programming examples](#programming-examples) chapter.
 
-## Innhold
+## Contents
 
-1. [Tilkobling og grensesnitt](#tilkobling-og-grensesnitt)
-2. [Protokoll og SCPI-syntaks](#protokoll-og-scpi-syntaks)
-3. [Felleskommandoer og målefunksjoner](#felleskommandoer-og-målefunksjoner)
-4. [Subsystemer: ABORt til ROUTe](#subsystemer-abort-til-route)
-5. [Subsystemer: SENSe, SENSe2 og SOURce](#subsystemer-sense-sense2-og-source)
-6. [Subsystemer: SYNC til STATus](#subsystemer-sync-til-status)
-7. [Hurtigreferanse: alle kommandoer](#hurtigreferanse-alle-kommandoer)
-8. [Statusrapporteringssystemet](#statusrapporteringssystemet)
-9. [Feilmeldinger](#feilmeldinger)
-10. [Programmeringseksempler](#programmeringseksempler)
+1. [Connection and interfaces](#connection-and-interfaces)
+2. [Protocol and SCPI syntax](#protocol-and-scpi-syntax)
+3. [Common commands and measurement functions](#common-commands-and-measurement-functions)
+4. [Subsystems: ABORt through ROUTe](#subsystems-abort-through-route)
+5. [Subsystems: SENSe, SENSe2 and SOURce](#subsystems-sense-sense2-and-source)
+6. [Subsystems: SYNC through STATus](#subsystems-sync-through-status)
+7. [Quick reference: all commands](#quick-reference-all-commands)
+8. [The status reporting system](#the-status-reporting-system)
+9. [Error messages](#error-messages)
+10. [Programming examples](#programming-examples)
 
 ---
 
-## Tilkobling og grensesnitt
+## Connection and interfaces
 
-Dette kapittelet beskriver maskinvaregrensesnittene for fjernstyring av Fluke NORMA 4000/5000 Power Analyzer. Som standard er instrumentet utstyrt med RS-232-grensesnitt. Som opsjon kan instrumentet også utstyres med IEC/IEEE-bussgrensesnitt (GPIB), IEEE 802.3 (Ethernet) og USB. **Samme SCPI-kommandosett gjelder uavhengig av hvilket grensesnitt som brukes** – for en TCP/Socket-applikasjon er Ethernet-grensesnittet det mest aktuelle.
+This chapter describes the hardware interfaces for remote control of the Fluke NORMA 4000/5000 Power Analyzer. By default the instrument is equipped with an RS-232 interface. As an option, the instrument can also be equipped with an IEC/IEEE bus interface (GPIB), IEEE 802.3 (Ethernet) and USB. **The same SCPI command set applies regardless of which interface is used** — for a TCP/Socket application, the Ethernet interface is the relevant one.
 
-### IEEE 802.3 (Ethernet) – opsjon (hovedgrensesnitt for TCP/Socket)
+### IEEE 802.3 (Ethernet) – option (main interface for TCP/Socket)
 
-Instrumentet kan som opsjon utstyres med IEEE 802.3 (Ethernet)-grensesnitt. Kontakten for Ethernet-grensesnittet (RJ-45) er plassert på baksiden av instrumentet. En kontroller (PC) for fjernstyring kan kobles til via grensesnittet. Tilkobling skjer med tvunnet parkabel (twisted pair).
+The instrument can optionally be equipped with an IEEE 802.3 (Ethernet) interface. The connector for the Ethernet interface (RJ-45) is located on the rear of the instrument. A controller (PC) for remote control can be connected through the interface. The connection is made with twisted pair cable.
 
-#### Grensesnittets egenskaper (Ethernet)
+#### Interface characteristics (Ethernet)
 
-- Toveis TCP/IP-datatransmisjon
-- 10/100 Mbps drift
+- Bidirectional TCP/IP data transmission
+- 10/100 Mbps operation
 - Half/full duplex
-- Høy dataoverføringshastighet: maks. 240 kB/s (måledata), 1,3 MB/s (rådata)
+- High data transfer rate: max. 240 kB/s (measurement data), 1.3 MB/s (raw data)
 
-#### Signallinjer (RJ-45)
+#### Signal lines (RJ-45)
 
-| Pinne | Signal | Beskrivelse |
-|-------|--------|-------------|
-| 1 | TD+ (Transmit Data Plus) | Positivt signal i TD-differensialparet; inneholder den serielle utgående datastrømmen som instrumentet sender ut på nettverket. |
-| 2 | TD− (Transmit Data Minus) | Negativt signal i TD-differensialparet; inneholder samme utgangsdata som pinne 1 (TD+). |
-| 3 | RD+ (Receive Data Plus) | Positivt signal i RD-differensialparet; inneholder den serielle inngående datastrømmen instrumentet mottar fra nettverket. |
-| 6 | RD− (Receive Data Minus) | Negativt signal i RD-differensialparet; inneholder samme inngangsdata som pinne 3 (RD+). |
+| Pin | Signal | Description |
+|-----|--------|-------------|
+| 1 | TD+ (Transmit Data Plus) | Positive signal in the TD differential pair; carries the serial outgoing data stream the instrument sends onto the network. |
+| 2 | TD− (Transmit Data Minus) | Negative signal in the TD differential pair; carries the same output data as pin 1 (TD+). |
+| 3 | RD+ (Receive Data Plus) | Positive signal in the RD differential pair; carries the serial incoming data stream the instrument receives from the network. |
+| 6 | RD− (Receive Data Minus) | Negative signal in the RD differential pair; carries the same input data as pin 3 (RD+). |
 
-#### Kabling mellom instrument og kontroller
+#### Cabling between instrument and controller
 
-Kabling mellom instrument og kontroller skjer med tvunnet parkabel med RJ-45-plugger. To tilkoblingsmåter støttes:
+Cabling between the instrument and the controller is done with twisted pair cable with RJ-45 plugs. Two connection methods are supported:
 
-- **Via lokalnett (hub/switch):** vanlig rett («patch»/straight-through) kabel mellom instrumentet og hub/switch, og mellom hub/switch og kontrolleren (NIC).
-- **Direkte tilkobling:** kontrolleren kobles direkte til instrumentet med krysset kabel (crossover), der TD+/RD+-parene krysses (pinne 1↔3, 2↔6).
+- **Via a local network (hub/switch):** an ordinary straight-through ("patch") cable between the instrument and the hub/switch, and between the hub/switch and the controller (NIC).
+- **Direct connection:** the controller is connected directly to the instrument with a crossover cable, where the TD+/RD+ pairs are crossed (pin 1↔3, 2↔6).
 
-#### Tilkoblingsinnstillinger (TCP/IP)
+#### Connection settings (TCP/IP)
 
-For å styre instrumentet over Ethernet-grensesnittet må det først opprettes en TCP/IP-forbindelse med disse innstillingene:
+To control the instrument over the Ethernet interface, a TCP/IP connection must first be established with these settings:
 
-| Innstilling | Beskrivelse |
-|-------------|-------------|
-| IP address | Instrumentets Internet Protocol-adresse (for eksempel `192.168.1.100`). |
-| TCP port number | Transmission Control Protocol-portnummer. Dette er for tiden fast satt til **23** (porten som er tildelt «telnet»-tjenesten). |
-| IP subnet address mask | Internet Protocol-subnettmaske (for eksempel `255.255.255.0`). |
-| IP gateway address | Internet Protocol-adressen til gatewayen (for eksempel `192.168.1.1`). |
+| Setting | Description |
+|---------|-------------|
+| IP address | The instrument's Internet Protocol address (for example `192.168.1.100`). |
+| TCP port number | Transmission Control Protocol port number. This is currently fixed at **23** (the port assigned to the "telnet" service). |
+| IP subnet address mask | Internet Protocol subnet mask (for example `255.255.255.0`). |
+| IP gateway address | The Internet Protocol address of the gateway (for example `192.168.1.1`). |
 
-På instrumentsiden konfigureres disse innstillingene i **General Setup**-skjermbildet. Når forbindelsen opprettes, må kontrolleren bruke instrumentets IP-adresse og TCP-port som destinasjonsadresse.
+On the instrument side, these settings are configured in the **General Setup** screen. When the connection is established, the controller must use the instrument's IP address and TCP port as the destination address.
 
-Eksempel på tilkobling (enhver TCP-socket/telnet-klient kan brukes):
+Example connection (any TCP socket/telnet client can be used):
 
 ```
 telnet 192.168.1.100 23
 ```
 
-### IEC/IEEE-bussgrensesnitt (GPIB) – opsjon
+### IEC/IEEE bus interface (GPIB) – option
 
-Instrumentet kan som opsjon utstyres med et IEC/IEEE-bussgrensesnitt. Kontakten for IEEE 488 er plassert på baksiden av instrumentet. En kontroller for fjernstyring kobles til via grensesnittet med skjermet kabel.
+The instrument can optionally be equipped with an IEC/IEEE bus interface. The IEEE 488 connector is located on the rear of the instrument. A controller for remote control is connected through the interface with a shielded cable.
 
-#### Grensesnittets egenskaper (GPIB)
+#### Interface characteristics (GPIB)
 
-- 8-bits parallell datatransmisjon
-- Toveis datatransmisjon
-- Trelednings-handshake (three-wire handshake)
-- Høy dataoverføringshastighet: maks. 115 kB/s (måledata), 1,2 MB/s (rådata)
-- Inntil 15 enheter kan kobles til
-- Maksimal lengde på tilkoblingskabler 15 m (enkeltforbindelse 2 m)
-- «Wired OR» dersom flere instrumenter kobles i parallell
+- 8-bit parallel data transmission
+- Bidirectional data transmission
+- Three-wire handshake
+- High data transfer rate: max. 115 kB/s (measurement data), 1.2 MB/s (raw data)
+- Up to 15 devices can be connected
+- Maximum connection cable length 15 m (single connection 2 m)
+- "Wired OR" if several instruments are connected in parallel
 
-#### Busslinjer
+#### Bus lines
 
-**Databuss med 8 linjer, DIO 1 til DIO 8**
-Overføringen er bit-parallell og byte-seriell i ASCII/ISO-kode. DIO1 er minst signifikante bit, DIO8 er mest signifikante.
+**Data bus with 8 lines, DIO 1 to DIO 8**
+Transmission is bit-parallel and byte-serial in ASCII/ISO code. DIO1 is the least significant bit, DIO8 is the most significant.
 
-**Kontrollbuss med 5 linjer**
+**Control bus with 5 lines**
 
-- `IFC` (Interface Clear): Aktiv LOW tilbakestiller grensesnittene til de tilkoblede instrumentene til standardinnstillingen.
-- `ATN` (Attention): Aktiv LOW signaliserer overføring av grensesnittmeldinger. Inaktiv HIGH signaliserer overføring av enhetsmeldinger.
-- `SRQ` (Service Request): Aktiv LOW lar instrumentet sende en serviceforespørsel til kontrolleren.
-- `REN` (Remote Enable): Aktiv LOW muliggjør omkobling til fjernstyring.
-- `EOI` (End or Identify): Har to funksjoner i kombinasjon med ATN:
-  - ATN = HIGH: Aktiv LOW markerer slutten på en dataoverføring.
-  - ATN = LOW: Aktiv LOW utløser parallell polling (parallel poll).
+- `IFC` (Interface Clear): Active LOW resets the interfaces of the connected instruments to the default setting.
+- `ATN` (Attention): Active LOW signals the transfer of interface messages. Inactive HIGH signals the transfer of device messages.
+- `SRQ` (Service Request): Active LOW lets the instrument send a service request to the controller.
+- `REN` (Remote Enable): Active LOW enables switching to remote control.
+- `EOI` (End or Identify): Has two functions in combination with ATN:
+  - ATN = HIGH: Active LOW marks the end of a data transfer.
+  - ATN = LOW: Active LOW triggers a parallel poll.
 
-**Handshake-buss med 3 linjer**
+**Handshake bus with 3 lines**
 
-- `DAV` (Data Valid): Aktiv LOW signaliserer en gyldig databyte på databussen.
-- `NRFD` (Not Ready For Data): Aktiv LOW signaliserer at en av de tilkoblede enhetene ikke er klar til å motta data.
-- `NDAC` (Not Data Accepted): Aktiv LOW så lenge instrumentet tar imot data som ligger på databussen.
+- `DAV` (Data Valid): Active LOW signals a valid data byte on the data bus.
+- `NRFD` (Not Ready For Data): Active LOW signals that one of the connected devices is not ready to receive data.
+- `NDAC` (Not Data Accepted): Active LOW for as long as the instrument is accepting data present on the data bus.
 
-#### Grensesnittfunksjoner
+#### Interface functions
 
-Instrumenter som kan fjernstyres via IEC/IEEE-bussen kan være utstyrt med ulike grensesnittfunksjoner. Tabell 3-1 viser grensesnittfunksjonene som er relevante for instrumentet.
+Instruments that can be remotely controlled via the IEC/IEEE bus may be equipped with various interface functions. Table 3-1 shows the interface functions relevant to the instrument.
 
-**Tabell 3-1. Grensesnittfunksjoner**
+**Table 3-1. Interface functions**
 
-| Kontrolltegn | Grensesnittfunksjon |
-|--------------|---------------------|
-| SH1 | Handshake-kildefunksjon (Source Handshake). |
-| AH1 | Handshake-mottaksfunksjon (Acceptor Handshake). |
-| L4 | Listener-funksjon. |
-| T6 | Talker-funksjon, med evne til å svare på seriell polling. |
-| SR1 | Serviceforespørselsfunksjon (Service Request). |
-| PP1 | Parallell pollingfunksjon *(ikke implementert)* |
-| RL1 | Remote/local-omkoblingsfunksjon *(ikke implementert)* |
-| DC1 | Tilbakestillingsfunksjon (Device Clear) *(ikke implementert)* |
-| DT1 | Triggerfunksjon (Device Trigger) *(ikke implementert)* |
+| Control character | Interface function |
+|-------------------|--------------------|
+| SH1 | Source Handshake function. |
+| AH1 | Acceptor Handshake function. |
+| L4 | Listener function. |
+| T6 | Talker function, with the ability to respond to a serial poll. |
+| SR1 | Service Request function. |
+| PP1 | Parallel poll function *(not implemented)* |
+| RL1 | Remote/local switching function *(not implemented)* |
+| DC1 | Device Clear function *(not implemented)* |
+| DT1 | Device Trigger function *(not implemented)* |
 
-#### Grensesnittmeldinger
+#### Interface messages
 
-Grensesnittmeldinger overføres til instrumentet på datalinjene mens ATN (Attention)-linjen er aktiv LOW. Disse meldingene brukes til kommunikasjon mellom kontrolleren og instrumentet.
+Interface messages are transferred to the instrument on the data lines while the ATN (Attention) line is active LOW. These messages are used for communication between the controller and the instrument.
 
-##### Universalkommandoer
+##### Universal commands
 
-Universalkommandoer (se Tabell 3-2) ligger i kodeområdet 10 til 1F hex. De virker på alle instrumenter som er koblet til bussen, uten at de adresseres først.
+Universal commands (see Table 3-2) lie in the code range 10 to 1F hex. They act on all instruments connected to the bus, without being addressed first.
 
-**Tabell 3-2. Universalkommandoer**
+**Table 3-2. Universal commands**
 
-| Kommando | QuickBASIC-kommando | Virkning på instrumentet |
-|----------|--------------------|--------------------------|
-| DCL (Device Clear) *(ikke implementert)* | `IBCMD (controller%, CHR$(20))` | Avbryter behandlingen av kommandoene som nettopp er mottatt, og setter kommandobehandlingsprogramvaren til en definert starttilstand. Endrer ikke instrumentinnstillingen. |
-| IFC (Interface Clear) | `IBSIC (controller%)` | Tilbakestiller grensesnittene til standardtilstanden. |
-| LLO (Local Lockout) *(ikke implementert)* | `IBCMD (controller%, CHR$(17))` | Manuell omkobling til LOCAL deaktiveres. |
-| SPE (Serial Poll Enable) | `IBCMD (controller%, CHR$(24))` | Klar for seriell polling. |
-| SPD (Serial Poll Disable) | `IBCMD (controller%, CHR$(25))` | Slutt på seriell polling. |
-| PPU (Parallel Poll Unconfigure) | `IBCMD (controller%, CHR$(21))` | Slutt på parallell pollingtilstand. |
+| Command | QuickBASIC command | Effect on the instrument |
+|---------|--------------------|--------------------------|
+| DCL (Device Clear) *(not implemented)* | `IBCMD (controller%, CHR$(20))` | Aborts processing of the commands just received and sets the command-processing software to a defined initial state. Does not change the instrument setting. |
+| IFC (Interface Clear) | `IBSIC (controller%)` | Resets the interfaces to the default state. |
+| LLO (Local Lockout) *(not implemented)* | `IBCMD (controller%, CHR$(17))` | Manual switching to LOCAL is disabled. |
+| SPE (Serial Poll Enable) | `IBCMD (controller%, CHR$(24))` | Ready for serial polling. |
+| SPD (Serial Poll Disable) | `IBCMD (controller%, CHR$(25))` | End of serial polling. |
+| PPU (Parallel Poll Unconfigure) | `IBCMD (controller%, CHR$(21))` | End of parallel poll state. |
 
-##### Adresserte kommandoer
+##### Addressed commands
 
-Adresserte kommandoer ligger i kodeområdet 00 til 0F hex. De virker bare på instrumenter som er adressert som «listener».
+Addressed commands lie in the code range 00 to 0F hex. They act only on instruments addressed as "listener".
 
-**Tabell 3-3. Adresserte kommandoer**
+**Table 3-3. Addressed commands**
 
-| Kommando | QuickBASIC-kommando | Virkning på instrumentet |
-|----------|--------------------|--------------------------|
-| SDC (Selected Device Clear) *(ikke implementert)* | `IBCLR (device%)` | Avbryter behandlingen av kommandoene som nettopp er mottatt, og setter kommandobehandlingsprogramvaren til en definert starttilstand. Endrer ikke instrumentinnstillingen. |
-| GET (Group Execute Trigger) *(ikke implementert)* | `IBTRG (device%)` | Trigger en tidligere aktiv instrumentfunksjon (for eksempel en sweep). Virkningen av kommandoen er identisk med en puls på den eksterne triggersignalinngangen. |
-| GTL (Go to Local) *(ikke implementert)* | `IBLOC (device%)` | Overgang til LOCAL-tilstand (manuell betjening). |
-| PPC (Parallel Poll Configure) *(ikke implementert)* | `IBPPC (device%, data%)` | Konfigurerer instrumentet for parallell polling. QuickBASIC-kommandoen utfører i tillegg PPE / PPD. |
+| Command | QuickBASIC command | Effect on the instrument |
+|---------|--------------------|--------------------------|
+| SDC (Selected Device Clear) *(not implemented)* | `IBCLR (device%)` | Aborts processing of the commands just received and sets the command-processing software to a defined initial state. Does not change the instrument setting. |
+| GET (Group Execute Trigger) *(not implemented)* | `IBTRG (device%)` | Triggers a previously active instrument function (for example a sweep). The effect of the command is identical to a pulse on the external trigger signal input. |
+| GTL (Go to Local) *(not implemented)* | `IBLOC (device%)` | Transition to LOCAL state (manual operation). |
+| PPC (Parallel Poll Configure) *(not implemented)* | `IBPPC (device%, data%)` | Configures the instrument for parallel polling. The QuickBASIC command additionally performs PPE / PPD. |
 
-### RS-232-C-grensesnitt (standard)
+### RS-232-C interface (standard)
 
-Instrumentet er utstyrt med et RS-232-C-grensesnitt som standard. Den 9-polede kontakten er plassert på baksiden av enheten. En kontroller for fjernstyring kan kobles til via grensesnittet.
+The instrument is equipped with an RS-232-C interface as standard. The 9-pin connector is located on the rear of the unit. A controller for remote control can be connected through the interface.
 
-#### Grensesnittets egenskaper (RS-232)
+#### Interface characteristics (RS-232)
 
-- Seriell datatransmisjon i asynkron modus
-- Toveis datatransmisjon via to separate linjer
-- Valgbar overføringshastighet fra 1200 til 115200 baud
-- Logisk 0-signalnivå fra +3 V til +15 V
-- Logisk 1-signalnivå fra −15 V til −3 V
-- En ekstern enhet (kontroller) kan kobles til
-- Programvare-handshake (XON, XOFF)
-- Maskinvare-handshake
+- Serial data transmission in asynchronous mode
+- Bidirectional data transmission via two separate lines
+- Selectable transmission rate from 1200 to 115200 baud
+- Logical 0 signal level from +3 V to +15 V
+- Logical 1 signal level from −15 V to −3 V
+- One external device (controller) can be connected
+- Software handshake (XON, XOFF)
+- Hardware handshake
 
-#### Signallinjer (9-polet kontakt)
+#### Signal lines (9-pin connector)
 
-| Pinne | Signal | Beskrivelse |
-|-------|--------|-------------|
-| 2 | TxD (Transmit Data) | Datalinje; overføring fra instrument til ekstern kontroller (DTE). |
-| 3 | RxD (Receive Data) | Datalinje; overføring fra ekstern kontroller til instrument. |
-| 4 | DSR (Data Set Ready) | Brukes ikke. |
-| 5 | GND (Ground) | Grensesnittjord, koblet til instrumentjord. |
-| 6 | DTR (Data Terminal Ready) | Brukes ikke. |
-| 7 | CTS (Clear To Send) | Inngang fra DTE/kontroller. Enheten stopper å sende data til DTE/kontrolleren når den detekterer at CTS-linjen går lav. |
-| 8 | RTS (Request To Send) | Utgang til DTE/kontroller. Enheten setter RTS-linjen lav (logisk 0) når den ikke kan ta imot mer data fra DTE/kontrolleren. |
+| Pin | Signal | Description |
+|-----|--------|-------------|
+| 2 | TxD (Transmit Data) | Data line; transmission from instrument to external controller (DTE). |
+| 3 | RxD (Receive Data) | Data line; transmission from external controller to instrument. |
+| 4 | DSR (Data Set Ready) | Not used. |
+| 5 | GND (Ground) | Interface ground, connected to instrument ground. |
+| 6 | DTR (Data Terminal Ready) | Not used. |
+| 7 | CTS (Clear To Send) | Input from the DTE/controller. The unit stops sending data to the DTE/controller when it detects that the CTS line goes low. |
+| 8 | RTS (Request To Send) | Output to the DTE/controller. The unit sets the RTS line low (logical 0) when it cannot accept any more data from the DTE/controller. |
 | 9 | RI | – |
 
-#### Transmisjonsparametre
+#### Transmission parameters
 
-For å sikre feilfri og korrekt dataoverføring må transmisjonsparametrene på instrumentet og kontrolleren ha samme innstillinger. Innstillingene gjøres i **General Setup**-skjermbildet på instrumentet.
+To ensure error-free and correct data transfer, the transmission parameters on the instrument and the controller must have the same settings. The settings are made in the **General Setup** screen on the instrument.
 
-| Parameter | Beskrivelse |
+| Parameter | Description |
 |-----------|-------------|
-| Transmission rate (baud rate) | Åtte ulike baudrater kan stilles inn på instrumentet: 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200. |
-| Data bits | Dataoverføring skjer i 8-bits eller 7-bits ASCII-kode. LSB (minst signifikante bit) overføres som første bit. |
-| Start bit | Overføringen av en databyte innledes med en startbit. Startbitens fallende flanke markerer begynnelsen på databyten. |
+| Transmission rate (baud rate) | Eight different baud rates can be set on the instrument: 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200. |
+| Data bits | Data transfer takes place in 8-bit or 7-bit ASCII code. The LSB (least significant bit) is transmitted as the first bit. |
+| Start bit | Transmission of a data byte is introduced by a start bit. The falling edge of the start bit marks the beginning of the data byte. |
 | Parity bit | Odd, Even, Zero, One, None |
-| Stop bit | Overføringen av en databyte avsluttes med en stoppbit. |
+| Stop bit | Transmission of a data byte is terminated by a stop bit. |
 
-Bitrekkefølge: bit 01 = startbit, bit 02 til 09 = databiter, bit 10 = stoppbit. Bitvarighet = 1/baudrate.
+Bit order: bit 01 = start bit, bits 02 to 09 = data bits, bit 10 = stop bit. Bit duration = 1/baud rate.
 
-Eksempel fra manualen: overføring av tegnet `A` (41 hex) i 8-bits ASCII-kode.
+Example from the manual: transmission of the character `A` (41 hex) in 8-bit ASCII code.
 
-#### Grensesnittfunksjoner (kontrolltegn)
+#### Interface functions (control characters)
 
-For grensesnittstyring kan en rekke kontrolltegn definert fra 0 til 20 hex i ASCII-koden overføres via grensesnittet.
+For interface control, a number of control characters defined from 0 to 20 hex in the ASCII code can be transferred via the interface.
 
-**Tabell 3-4. Kontrolltegn for RS-232-C-grensesnittet**
+**Table 3-4. Control characters for the RS-232-C interface**
 
-| Kontrolltegn | Grensesnittfunksjon |
-|--------------|---------------------|
-| `<Ctrl Q>` 11 hex | Aktiverer tegnutmating (XON). |
-| `<Ctrl S>` 13 hex | Stopper tegnutmating (XOFF). |
-| Break (minst 1 tegn logisk 0) | Tømmer instrumentets inngangsbuffer. Alle ventende spørringer avbrytes. Tilsvarer IFC på GPIB-grensesnittet. |
-| 0A hex | Terminator `<LF>`. Instrumentet går til remote-tilstand ved mottak av dette tegnet sammen med en gyldig kommando. |
+| Control character | Interface function |
+|-------------------|--------------------|
+| `<Ctrl Q>` 11 hex | Enables character output (XON). |
+| `<Ctrl S>` 13 hex | Stops character output (XOFF). |
+| Break (at least 1 character of logical 0) | Clears the instrument's input buffer. All pending queries are aborted. Equivalent to IFC on the GPIB interface. |
+| 0A hex | Terminator `<LF>`. The instrument enters the remote state on receiving this character together with a valid command. |
 
 #### Handshake
 
-**Programvare-handshake**
-Programvare-handshake med XON/XOFF-protokollen styrer dataoverføringen. Hvis mottakeren (instrumentet) vil stanse inndata, sender den XOFF til senderen. Senderen avbryter da datautmatingen til den mottar XON fra mottakeren. Samme funksjon finnes også på sendersiden (kontrolleren).
+**Software handshake**
+Software handshake with the XON/XOFF protocol controls the data transfer. If the receiver (the instrument) wants to stop incoming data, it sends XOFF to the transmitter. The transmitter then interrupts data output until it receives XON from the receiver. The same function also exists on the transmitter side (the controller).
 
-> **Merk:** Programvare-handshake er ikke egnet for overføring av binærdata – maskinvare-handshake foretrekkes.
+> **Note:** Software handshake is not suitable for transferring binary data — hardware handshake is preferred.
 
-**Maskinvare-handshake**
-Med maskinvare-handshake signaliserer instrumentet mottaksberedskap via linjene DTR og RTS. Logisk 0 betyr «klar», logisk 1 betyr «ikke klar». Om kontrolleren er klar til å motta, signaliseres til instrumentet via CTS- eller DSR-linjen (se «Signallinjer»). Instrumentets sender slås på med logisk 0 og av med logisk 1. RTS-linjen forblir aktiv så lenge det serielle grensesnittet er aktivt. DTR-linjen styrer instrumentets mottaksberedskap.
+**Hardware handshake**
+With hardware handshake, the instrument signals readiness to receive via the DTR and RTS lines. Logical 0 means "ready", logical 1 means "not ready". Whether the controller is ready to receive is signalled to the instrument via the CTS or DSR line (see "Signal lines"). The instrument's transmitter is switched on with logical 0 and off with logical 1. The RTS line stays active for as long as the serial interface is active. The DTR line controls the instrument's readiness to receive.
 
-**Kabling mellom instrument og kontroller**
-Kablingen mellom instrumentet og kontrolleren er en forlengelseskabel (ved 9-polet kontrollerkontakt), det vil si at data-, kontroll- og signallinjene har rett gjennomgående kabling (straight-through). Kablingsskjemaet gjelder for kontrollere med 9-polet eller 25-polet kontakt: signalparene DCD/DCD, TxD/RxD, RxD/TxD, DSR/DTR, GND/GND, DTR/DSR, CTS/RTS, RTS/CTS og RI/RI kobles mellom instrumentets 9-polede hunnkontakt og kontrolleren.
+**Cabling between instrument and controller**
+The cabling between the instrument and the controller is an extension cable (with a 9-pin controller connector), that is, the data, control and signal lines are wired straight through. The wiring scheme applies to controllers with a 9-pin or 25-pin connector: the signal pairs DCD/DCD, TxD/RxD, RxD/TxD, DSR/DTR, GND/GND, DTR/DSR, CTS/RTS, RTS/CTS and RI/RI are connected between the instrument's 9-pin female connector and the controller.
 
-### Universal Serial Bus (USB) – opsjon
+### Universal Serial Bus (USB) – option
 
-Instrumentet kan som opsjon utstyres med USB-grensesnitt. Kontakten for USB-grensesnittet (USB serie «B»-hunnkontakt) er plassert på baksiden av instrumentet. En kontroller for fjernstyring kan kobles til via grensesnittet. Tilkobling skjer med USB A-til-USB B-kabel (også kalt USB A/B-kabel eller serie «A»-plugg til serie «B»-plugg-kabel).
+The instrument can optionally be equipped with a USB interface. The connector for the USB interface (USB series "B" female connector) is located on the rear of the instrument. A controller for remote control can be connected through the interface. The connection is made with a USB A-to-USB B cable (also called a USB A/B cable, or series "A" plug to series "B" plug cable).
 
-#### Grensesnittets egenskaper (USB)
+#### Interface characteristics (USB)
 
-- Toveis USB-datatransmisjon
-- Kompatibel med USB 1.1 og USB 2.0
-- Dataoverføringshastighet 800 kB/s (rådata)
+- Bidirectional USB data transmission
+- Compatible with USB 1.1 and USB 2.0
+- Data transfer rate 800 kB/s (raw data)
 
-#### Pinnetilordning (serie B-hunnkontakt)
+#### Pin assignment (series B female connector)
 
-| Pinne | Signal |
-|-------|--------|
+| Pin | Signal |
+|-----|--------|
 | 1 | VBUS (power) |
 | 2 | D− (data minus) |
 | 3 | D+ (data plus) |
 | 4 | GND (ground) |
 
-#### Tilkoblingsinnstillinger (VCP)
+#### Connection settings (VCP)
 
-For å styre instrumentet over USB-grensesnittet må det først opprettes en serieportforbindelse med VCP-navnet (Virtual COM Port, for eksempel `COM3`) som er knyttet til instrumentets USB-grensesnitt. VCP-navnet finnes i Windows Enhetsbehandling under «Ports (COM & LPT)». Der vises en port med navnet «NORMA Power Analyzer USB Serial Port» når instrumentet er slått på og koblet til en PC med USB-kabel.
+To control the instrument over the USB interface, a serial port connection must first be established using the VCP name (Virtual COM Port, for example `COM3`) associated with the instrument's USB interface. The VCP name is found in Windows Device Manager under "Ports (COM & LPT)". A port named "NORMA Power Analyzer USB Serial Port" appears there when the instrument is switched on and connected to a PC with a USB cable.
 
-På instrumentsiden brukes **General Setup**-skjermbildet til å velge USB-grensesnittet. Ingen andre innstillinger trengs på instrumentsiden.
+On the instrument side, the **General Setup** screen is used to select the USB interface. No other settings are needed on the instrument side.
 
-## Protokoll og SCPI-syntaks
+## Protocol and SCPI syntax
 
-Dette kapittelet gir grunnleggende informasjon om fjernstyring av instrumentet: grensesnitt- og enhetsmeldinger, kommandobehandling, statusrapporteringssystem osv. Instrumentet er utstyrt med RS-232-C-grensesnitt og valgfritt med et IEC/IEEE-bussgrensesnitt i henhold til standarden IEC 625.1/IEEE 488.1. Kontaktene sitter på baksiden av instrumentet og lar deg koble til en kontroller for fjernstyring.
+This chapter provides basic information about remote control of the instrument: interface and device messages, command processing, the status reporting system and so on. The instrument is equipped with an RS-232-C interface and optionally with an IEC/IEEE bus interface conforming to the IEC 625.1/IEEE 488.1 standard. The connectors are on the rear of the instrument and let you connect a controller for remote control.
 
-Instrumentet støtter **SCPI versjon 1999.0** (Standard Commands for Programmable Instruments). SCPI-standarden er basert på standarden IEEE 488.2 og har som mål å standardisere enhetsspesifikke kommandoer, feilhåndtering og statusregistrene.
+The instrument supports **SCPI version 1999.0** (Standard Commands for Programmable Instruments). The SCPI standard is based on the IEEE 488.2 standard and aims to standardize device-specific commands, error handling and the status registers.
 
-Det forutsettes at brukeren har grunnleggende kunnskap om IEC/IEEE-bussprogrammering og betjening av kontrolleren. Programmeringseksemplene for IEC-buss i manualen er alle skrevet med VISA C API.
+It is assumed that the user has basic knowledge of IEC/IEEE bus programming and of operating the controller. The IEC bus programming examples in the manual are all written with the VISA C API.
 
-### Komme i gang
+### Getting started
 
-En kort betjeningssekvens som raskt viser instrumentets grunnfunksjoner.
+A short operating sequence that quickly demonstrates the instrument's basic functions.
 
-**Forutsetninger:**
+**Prerequisites:**
 
-- Instrumentet kobles til port COM1 på den styrende datamaskinen. Fabrikkinnstillinger: Baud Rate = 115200, Data Bits = 8, Stop Bits = 1, Parity = None, Handshake = RTS/CTS.
-- Programmet HyperTerminal brukes til å kommunisere med instrumentet.
+- The instrument is connected to port COM1 on the controlling computer. Factory settings: Baud Rate = 115200, Data Bits = 8, Stop Bits = 1, Parity = None, Handshake = RTS/CTS.
+- The HyperTerminal program is used to communicate with the instrument.
 
-**Prosedyre:**
+**Procedure:**
 
-1. Koble sammen instrumentet og den styrende datamaskinen.
-2. Start HyperTerminal på datamaskinen (Start > Programs > Accessories > Communication > HyperTerminal). HyperTerminal er en standard del av Windows.
-3. Hvis HyperTerminal aldri har vært brukt/konfigurert før:
-   - I vinduet *Connection Description*: skriv inn navnet `Fluke` og trykk OK.
-   - I vinduet *Connect To*: velg `COM1` under *Connect using* (eller en annen port hvis du bruker den) og trykk OK.
-   - I vinduet *COM1 Properties*: sett riktige egenskaper og trykk OK:
+1. Connect the instrument and the controlling computer together.
+2. Start HyperTerminal on the computer (Start > Programs > Accessories > Communication > HyperTerminal). HyperTerminal is a standard part of Windows.
+3. If HyperTerminal has never been used/configured before:
+   - In the *Connection Description* window: enter the name `Fluke` and press OK.
+   - In the *Connect To* window: select `COM1` under *Connect using* (or another port if you are using one) and press OK.
+   - In the *COM1 Properties* window: set the correct properties and press OK:
      - Bits per second = 115200
      - Data bits = 8
      - Parity = None
      - Stop bits = 1
      - Flow control = None
-4. Gå til File > Properties > Settings > ASCII Setup og huk av følgende, og trykk OK to ganger:
+4. Go to File > Properties > Settings > ASCII Setup, tick the following, and press OK twice:
    - Send line ends with line feeds
    - Echo typed characters locally
    - Append line feeds to incoming line ends
-5. Skriv `*IDN?` i hovedvinduet (det hvite) og trykk Enter. (Ikke skriv feil — alle tegn sendes umiddelbart til instrumentet når du trykker en tast. Backspace sletter ikke feilskrevne tegn. Gjør du en feil, trykk Enter flere ganger; det setter ting i orden igjen.)
-6. Instrumentet returnerer identifikasjonsstrengen, for eksempel:
+5. Type `*IDN?` in the main (white) window and press Enter. (Do not make typing mistakes — every character is sent to the instrument immediately as you press a key. Backspace does not delete mistyped characters. If you do make a mistake, press Enter several times; that puts things right again.)
+6. The instrument returns the identification string, for example:
 
    ```
    Fluke,NORMA4000,KN34512BA,01.00
    ```
 
-7. Skriv `DATA? "POW"` i hovedvinduet og trykk Enter. Dette ber instrumentet returnere siste gyldige effektmåling.
-8. Instrumentet returnerer siste gyldige effektmåling, for eksempel:
+7. Type `DATA? "POW"` in the main window and press Enter. This asks the instrument to return the last valid power measurement.
+8. The instrument returns the last valid power measurement, for example:
 
    ```
    +1.23456E+02
    ```
 
-### Omkobling til fjernstyring
+### Switching to remote control
 
-Ved oppstart er instrumentet alltid i manuell betjeningsmodus ("LOCAL"-tilstand) og kan betjenes via frontpanelet.
+At power-up the instrument is always in manual operating mode ("LOCAL" state) and can be operated from the front panel.
 
-Instrumentet kobles om til fjernstyring ("REMOTE"-tilstand) slik:
+The instrument is switched to remote control ("REMOTE" state) as follows:
 
-- **IEC/IEEE-buss:** når det mottar en adressert kommando fra kontrolleren med REN-linjen satt.
-- **Andre grensesnitt:** når det mottar en gyldig kommando terminert med line feed `<LF>` (= 0Ah) fra kontrolleren i tilstanden `SYSTem:KLOCk REM`, eller eksplisitt via denne kommandoen.
+- **IEC/IEEE bus:** when it receives an addressed command from the controller with the REN line asserted.
+- **Other interfaces:** when it receives a valid command terminated with a line feed `<LF>` (= 0Ah) from the controller in the `SYSTem:KLOCk REM` state, or explicitly via that command.
 
-Under fjernstyring er betjening via frontpanelet deaktivert. Instrumentet forblir i fjernstyringstilstand til det settes tilbake til manuell tilstand via frontpanelet eller via fjernstyringen. Omkobling fra manuell til fjernstyring og omvendt påvirker ikke instrumentinnstillingene.
+During remote control, operation from the front panel is disabled. The instrument stays in the remote control state until it is returned to the manual state from the front panel or via remote control. Switching from manual to remote control and back does not affect the instrument settings.
 
-#### Indikasjoner under fjernstyring
+#### Indications during remote control
 
-Fjernstyringstilstanden vises med et toveisradio-ikon i cellen lengst til venstre i statuslinjen på instrumentets skjerm. Et nøkkelikon i tredje celle i statuslinjen indikerer at [LOCAL]-tasten (F6/Esc) er deaktivert, og at omkobling til manuell betjening bare kan gjøres via fjernstyring. Vises ikke nøkkelikonet, kan omkobling til manuell betjening gjøres med [LOCAL]-tasten (F6/Esc).
+The remote control state is shown by a two-way radio icon in the leftmost cell of the status bar on the instrument display. A key icon in the third cell of the status bar indicates that the [LOCAL] key (F6/Esc) is disabled and that switching to manual operation can only be done via remote control. If the key icon is not shown, switching to manual operation can be done with the [LOCAL] key (F6/Esc).
 
-### Retur til manuell betjening
+### Returning to manual operation
 
-Retur til manuell betjening kan gjøres via frontpanelet eller IEC/IEEE-bussen.
+Returning to manual operation can be done from the front panel or over the IEC/IEEE bus.
 
-**Manuelt:** Trykk [LOCAL]-tasten.
+**Manually:** Press the [LOCAL] key.
 
-Merk:
+Note:
 
-- Før omkobling må kommandobehandlingen være fullført, ellers skjer omkobling til fjernstyring umiddelbart igjen.
-- [LOCAL]-tasten kan deaktiveres med kommandoen `SYSTem:KLOCk ON` eller universalkommandoen LLO (kun GPIB) for å hindre utilsiktet omkobling. Da er omkobling til manuell betjening bare mulig via fjernstyring.
-- [LOCAL]-tasten kan aktiveres igjen med kommandoen `SYSTem:KLOCk OFF` eller ved å deaktivere REN-kontrollinjen (kun GPIB).
+- Command processing must be complete before switching, otherwise the instrument switches back to remote control immediately.
+- The [LOCAL] key can be disabled with the command `SYSTem:KLOCk ON` or the universal command LLO (GPIB only) to prevent accidental switching. Switching to manual operation is then only possible via remote control.
+- The [LOCAL] key can be enabled again with the command `SYSTem:KLOCk OFF` or by deasserting the REN control line (GPIB only).
 
-**Fjernstyrt:**
+**Remotely:**
 
-- GTL-grensesnittmelding (kun GPIB)
-- Med kommandoen `SYSTem:KLOCk OFF`
+- GTL interface message (GPIB only)
+- With the command `SYSTem:KLOCk OFF`
 
-### Kommandoer og instrumentresponser
+### Commands and instrument responses
 
-Instrumentkommandoer overføres via det valgte grensesnittet. Med unntak av enkelte enhetsresponser (binærdata) brukes ASCII-kode. På IEC/IEEE-buss (GPIB) omtales kommandoer og instrumentresponser som enhetsmeldinger (device messages). Kommandoer og responser er i all hovedsak identiske for alle grensesnittyper. Det skilles etter hvilken retning enhetsmeldingene sendes på grensesnittet.
+Instrument commands are transferred via the selected interface. With the exception of certain device responses (binary data), ASCII code is used. On the IEC/IEEE bus (GPIB), commands and instrument responses are referred to as device messages. Commands and responses are essentially identical for all interface types. A distinction is made according to the direction in which device messages are sent on the interface.
 
-**Kommandoer** er meldinger kontrolleren sender til instrumentet. De betjener enhetsfunksjonene og ber om informasjon. Kommandoer inndeles etter to kriterier:
+**Commands** are messages the controller sends to the instrument. They operate the device functions and request information. Commands are divided according to two criteria:
 
-1. Etter virkningen de har på instrumentet:
-   - *Innstillingskommandoer* (setting commands) forårsaker instrumentinnstillinger, for eksempel tilbakestilling av instrumentet eller setting av utgangsnivået til 1 V.
-   - *Spørringer* (queries) gjør at data legges klar for utlesing på grensesnittet, for eksempel enhetsidentifikasjon eller avlesning av aktiv inngang.
-2. Etter definisjonen i standarden IEEE 488.2:
-   - *Common Commands* (fellesskommandoer) er eksakt definert med hensyn til funksjon og notasjon i IEEE 488.2. De gjelder funksjoner som håndtering av de standardiserte statusregistrene, tilbakestilling og selvtest.
-   - *Enhetsspesifikke kommandoer* gjelder funksjoner som avhenger av instrumentets egenskaper, for eksempel frekvensinnstilling. Flertallet av disse kommandoene er også standardisert av SCPI-komiteen.
+1. By the effect they have on the instrument:
+   - *Setting commands* cause instrument settings, for example resetting the instrument or setting the output level to 1 V.
+   - *Queries* cause data to be made available for reading on the interface, for example device identification or reading the active input.
+2. By their definition in the IEEE 488.2 standard:
+   - *Common commands* are exactly defined with respect to function and notation in IEEE 488.2. They cover functions such as handling of the standardized status registers, reset and self-test.
+   - *Device-specific commands* cover functions that depend on the instrument's characteristics, for example frequency setting. The majority of these commands are also standardized by the SCPI committee.
 
-**Enhetsresponser** (device responses) er meldinger instrumentet sender til kontrolleren som svar på en spørring. De kan inneholde måleresultater eller informasjon om instrumentets status.
+**Device responses** are messages the instrument sends to the controller in reply to a query. They may contain measurement results or information about the instrument's status.
 
-### Struktur og syntaks for enhetsmeldinger
+### Structure and syntax of device messages
 
-#### Introduksjon til SCPI
+#### Introduction to SCPI
 
-SCPI (Standard Commands for Programmable Instruments) beskriver et standard kommandosett for programmering av instrumenter, uavhengig av instrumenttype eller produsent. Målet til SCPI-konsortiet er å standardisere de enhetsspesifikke kommandoene i størst mulig grad. Det er utviklet en modell som definerer identiske funksjoner i en enhet eller i forskjellige enheter, og kommandosystemer er laget slik at identiske funksjoner kan adresseres med identiske kommandoer. Kommandosystemene har hierarkisk struktur (trestruktur).
+SCPI (Standard Commands for Programmable Instruments) describes a standard command set for programming instruments, independently of instrument type or manufacturer. The goal of the SCPI consortium is to standardize the device-specific commands as far as possible. A model has been developed that defines identical functions within one device or across different devices, and command systems are designed so that identical functions can be addressed with identical commands. The command systems have a hierarchical (tree) structure.
 
-SCPI er basert på standarden IEEE 488.2 og bruker de samme grunnleggende syntakselementene og fellesskommandoene som er definert der. Deler av syntaksen for enhetsresponsene er definert mer detaljert enn i IEEE 488.2 (se avsnittet "Responser på spørringer").
+SCPI is based on the IEEE 488.2 standard and uses the same basic syntax elements and common commands defined there. Parts of the syntax for device responses are defined in more detail than in IEEE 488.2 (see the section "Responses to queries").
 
-#### Kommandostruktur
+#### Command structure
 
-Kommandoene består av en *header* og, i de fleste tilfeller, én eller flere *parametre*. Header og parametre skilles med et "white space" (ASCII-kode 0 til 9, 11 til 32 desimalt, blank). Headere kan bestå av flere nøkkelord. Spørringer dannes ved å legge et spørsmålstegn direkte etter headeren.
+Commands consist of a *header* and, in most cases, one or more *parameters*. Header and parameters are separated by a "white space" (ASCII code 0 to 9, 11 to 32 decimal, blank). Headers may consist of several keywords. Queries are formed by appending a question mark directly after the header.
 
-#### Common Commands (fellesskommandoer)
+#### Common commands
 
-Fellesskommandoer (enhetsuavhengige) består av en header innledet med en asterisk `*`, og eventuelt én eller flere parametre.
+Common commands (device-independent) consist of a header introduced by an asterisk `*`, and optionally one or more parameters.
 
-Eksempler:
+Examples:
 
 ```
-*RST      RESET, tilbakestiller instrumentet
-*ESE 253  EVENT STATUS ENABLE, setter bitene i event status enable-registeret
-*ESR?     EVENT STATUS QUERY, leser innholdet i event status-registeret
+*RST      RESET, resets the instrument
+*ESE 253  EVENT STATUS ENABLE, sets the bits in the event status enable register
+*ESR?     EVENT STATUS QUERY, reads the contents of the event status register
 ```
 
-#### Enhetsspesifikke kommandoer
+#### Device-specific commands
 
-##### Hierarki
+##### Hierarchy
 
-Enhetsspesifikke kommandoer har hierarkisk struktur. De ulike nivåene representeres av sammensatte headere. Headere på det høyeste nivået (rotnivået) har bare ett nøkkelord, som betegner et helt kommandosystem.
+Device-specific commands have a hierarchical structure. The various levels are represented by compound headers. Headers at the highest level (the root level) have only one keyword, which designates an entire command system.
 
-Eksempel:
+Example:
 
 ```
 :SYSTem
 ```
 
-Dette nøkkelordet betegner kommandosystemet `:SYSTem`. For kommandoer på lavere nivåer må hele stien angis, fra venstre og nedover med høyeste nivå først, og de enkelte nøkkelordene skilles med kolon `:`.
+This keyword designates the `:SYSTem` command system. For commands at lower levels the full path must be given, from left to right with the highest level first, and the individual keywords separated by a colon `:`.
 
-Eksempel:
+Example:
 
 ```
 INPut:COUPling AC
 ```
 
-Denne kommandoen ligger på andre nivå i `INPut`-subsystemet og velger AC-kobling for inngangskanalen.
+This command is at the second level of the `INPut` subsystem and selects AC coupling for the input channel.
 
-Trestrukturen i `INPut`-systemet (manualens figur 1-1) ser slik ut:
+The tree structure of the `INPut` system (figure 1-1 in the manual) looks like this:
 
 ```
 INPut
@@ -415,338 +415,338 @@ INPut
         └── FREQuency
 ```
 
-##### Valgfritt nøkkelord
+##### Optional keyword
 
-Noen kommandosystemer tillater at visse nøkkelord settes inn i headeren eller utelates. Disse nøkkelordene er markert med hakeparenteser i beskrivelsen. Instrumentet må gjenkjenne full kommandolengde for kompatibilitet med SCPI-standarden. Noen kommandoer kan forkortes betraktelig ved å utelate valgfrie nøkkelord.
+Some command systems allow certain keywords to be inserted into the header or omitted. These keywords are marked with square brackets in the description. The instrument must recognize the full command length for compatibility with the SCPI standard. Some commands can be shortened considerably by omitting optional keywords.
 
-Eksempel:
+Example:
 
 ```
 INPut:FILTer[:STATe] ON
 ```
 
-Denne kommandoen aktiverer antialiasingfilteret som settes inn i signalveien før signalet behandles av `SENSe`-subsystemet. Følgende kommando har samme effekt:
+This command enables the anti-aliasing filter inserted into the signal path before the signal is processed by the `SENSe` subsystem. The following command has the same effect:
 
 ```
 INPut:FILTer ON
 ```
 
-> **Merk:** Et valgfritt nøkkelord må ikke utelates hvis virkningen spesifiseres nærmere med et numerisk suffiks.
+> **Note:** An optional keyword must not be omitted if its effect is further specified by a numeric suffix.
 
-##### Lang og kort form
+##### Long and short form
 
-Eksempel:
+Example:
 
 ```
 STATus:QUEStionable:ENABle 1
 STAT:QUES:ENAB 1
 ```
 
-> **Merk:** Kortformen kjennetegnes av store bokstaver, langformen tilsvarer det komplette ordet. Store og små bokstaver tjener kun dette formålet i dokumentasjonen — instrumentet selv skiller ikke mellom store og små bokstaver.
+> **Note:** The short form is indicated by upper-case letters; the long form corresponds to the complete word. Upper and lower case serve only this purpose in the documentation — the instrument itself does not distinguish between upper and lower case.
 
-##### Parametre
+##### Parameters
 
-En parameter må skilles fra headeren med et "white space". Hvis en kommando har flere parametre, skilles de med komma `,`.
+A parameter must be separated from the header by a "white space". If a command has several parameters, they are separated by commas `,`.
 
-Eksempel:
+Example:
 
 ```
 FORMat:READings:DATA REAL,32
 ```
 
-Denne kommandoen velger binært 32-bits flyttallsformat for dataoverføringer.
+This command selects binary 32-bit floating point format for data transfers.
 
-##### Numerisk suffiks
+##### Numeric suffix
 
-Hvis en enhet har flere funksjoner eller egenskaper av samme type, for eksempel innganger, kan ønsket funksjon velges ved å legge et suffiks til kommandoen. Angivelser uten suffiks tolkes som suffiks 1, med mindre annet er eksplisitt angitt.
+If a device has several functions or features of the same kind, for example inputs, the desired one can be selected by appending a suffix to the command. Entries without a suffix are interpreted as suffix 1, unless explicitly stated otherwise.
 
-Eksempel:
+Example:
 
 ```
 INPut:COUPling DC
 ```
 
-Denne kommandoen setter inngangskoblingen på kanal 1 til DC.
+This command sets the input coupling on channel 1 to DC.
 
-Målefunksjoner (parametre til kommandoen `SENSe:FUNCtion`) bruker numerisk suffiks for å velge fase. Hvis ikke noe suffiks angis, konfigureres totalverdien.
+Measurement functions (parameters to the `SENSe:FUNCtion` command) use a numeric suffix to select the phase. If no suffix is given, the total value is configured.
 
-#### Struktur på kommandolinjer
+#### Structure of command lines
 
-En kommandolinje kan inneholde én eller flere kommandoer.
+A command line may contain one or more commands.
 
-**Terminering av meldinger — en kommandolinje termineres med ett av følgende:**
+**Message termination — a command line is terminated by one of the following:**
 
 - `<New Line>` (line feed, `<LF>` = 0Ah)
-- `<New Line>` sammen med EOI
-- EOI sammen med siste databyte (EOI gjelder kun GPIB-grensesnittet)
+- `<New Line>` together with EOI
+- EOI together with the last data byte (EOI applies to the GPIB interface only)
 
-VISA produserer automatisk EOI sammen med siste databyte.
+VISA automatically produces EOI together with the last data byte.
 
-Flere kommandoer i én kommandolinje skilles med semikolon `;`. Hvis neste kommando tilhører et annet kommandosystem, følges semikolonet av et kolon.
+Several commands in a single command line are separated by a semicolon `;`. If the next command belongs to a different command system, the semicolon is followed by a colon.
 
-Eksempel:
+Example:
 
 ```
 INPut1:COUPling DC;:SENSe:CURRent1:DC:RANGe 1.0
 ```
 
-Denne kommandolinjen inneholder to kommandoer. Den første tilhører `INPut`-subsystemet og setter inngangskoblingen for kanal 1. Den andre tilhører `SENSe`-subsystemet og setter strømområdet på fase 1 til 1.0 A. (`DC` kunne vært utelatt siden det er et valgfritt nøkkelord. For dette instrumentet er det ingen forskjell mellom AC- og DC-område — begge setter samme område.)
+This command line contains two commands. The first belongs to the `INPut` subsystem and sets the input coupling for channel 1. The second belongs to the `SENSe` subsystem and sets the current range on phase 1 to 1.0 A. (`DC` could have been omitted since it is an optional keyword. For this instrument there is no difference between AC and DC range — both set the same range.)
 
-Hvis påfølgende kommandoer tilhører samme system og har ett eller flere nivåer felles, kan kommandolinjen forkortes. Da startes den andre kommandoen (etter semikolonet) med nivået som ligger under de felles nivåene. Kolonet etter semikolonet må da utelates.
+If consecutive commands belong to the same system and share one or more levels, the command line can be shortened. The second command (after the semicolon) then starts at the level below the shared levels. The colon after the semicolon must then be omitted.
 
-Eksempel (full lengde — to kommandoer i `INPut`-subsystemet med ett felles nivå):
+Example (full length — two commands in the `INPut` subsystem with one shared level):
 
 ```
 INPut1:SHUNt EXTernal;:INPut1:GAIN 25.0
 ```
 
-Forkortet form av kommandolinjen:
+Shortened form of the command line:
 
 ```
 INPut1:SHUNt EXTernal;GAIN 25.0
 ```
 
-En ny kommandolinje må imidlertid alltid startes med den komplette stien:
+A new command line must, however, always start with the complete path:
 
 ```
 INPut1:SHUNt EXTernal
 INPut1:GAIN 25.0
 ```
 
-#### Responser på spørringer
+#### Responses to queries
 
-For hver innstillingskommando er det definert en spørring, med mindre annet er eksplisitt angitt. Spørringen dannes ved å legge et spørsmålstegn til den aktuelle innstillingskommandoen. Responser på spørringer etter SCPI-standarden er delvis underlagt strengere regler enn responser etter IEEE 488.2:
+For each setting command a query is defined, unless explicitly stated otherwise. The query is formed by appending a question mark to the corresponding setting command. Responses to queries under the SCPI standard are in part subject to stricter rules than responses under IEEE 488.2:
 
-1. **Den etterspurte parameteren overføres uten header.**
+1. **The requested parameter is transferred without a header.**
 
    ```
    INPut:COUPling?
-   Respons: AC
+   Response: AC
    ```
 
-2. **Numeriske verdier returneres uten enhet.** Fysiske størrelser refererer til grunnenhetene eller til enhetene satt med Unit-kommandoen.
+2. **Numeric values are returned without a unit.** Physical quantities refer to the base units or to the units set with the Unit command.
 
    ```
    INPut:FILTer:LPASs:FREQuency?
-   Respons: 3.0E5 for 300 kHz
+   Response: 3.0E5 for 300 kHz
    ```
 
-3. **Sannhetsverdier (boolske parametre) returneres som 0 (Off) og 1 (On).**
+3. **Truth values (boolean parameters) are returned as 0 (Off) and 1 (On).**
 
    ```
    INPut:FILTer:STATe?
-   Respons: 1
+   Response: 1
    ```
 
-4. **Tekst (character data) returneres i kortform.**
+4. **Text (character data) is returned in short form.**
 
    ```
    INPut:SHUNt?
-   Respons: EXT
+   Response: EXT
    ```
 
-5. **Ved flere spørringer i samme kommandolinje returneres responsene i samme rekkefølge som spørringene, skilt med semikolon.**
+5. **With several queries in the same command line, the responses are returned in the same order as the queries, separated by semicolons.**
 
    ```
    INPut:FILTer:STATe?;:INPut:FILTer:LPASs:FREQuency?
-   Respons: 1;1.0E+04
+   Response: 1;1.0E+04
    ```
 
-#### Parametertyper
+#### Parameter types
 
-De fleste kommandoer krever at en parameter angis. Parametre må skilles fra headeren med et "white space". Tillatte parametre er numeriske verdier, boolske parametre, tekst, tegnstrenger og blokkdata. Parametertypen og tillatt verdiområde for en gitt kommando er angitt i kommandobeskrivelsen.
+Most commands require a parameter to be given. Parameters must be separated from the header by a "white space". Permitted parameters are numeric values, boolean parameters, text, character strings and block data. The parameter type and permitted value range for a given command are stated in the command description.
 
-##### Numeriske verdier
+##### Numeric values
 
-Numeriske verdier kan angis i enhver form: fortegn, desimalpunktum og eksponent. Verdier som overskrider instrumentets oppløsning, rundes opp eller ned. Mantissen kan bestå av inntil 15 tegn, og eksponenten må ligge i verdiområdet -307 til 307. Eksponenten innledes med `E` eller `e`. Å angi eksponenten alene er ikke tillatt. For fysiske størrelser med enhet aksepteres ingen enhet — grunnenheten brukes.
-
-```
-SENSe:VOLTage1:RANGe 1000.0    setter område 1000 V
-```
-
-##### Boolske parametre
-
-Boolske parametre representerer to tilstander. ON-tilstanden (logisk sann) representeres av `ON` eller en numerisk verdi ulik 0. OFF-tilstanden (logisk usann) representeres av `OFF` eller den numeriske verdien 0. Ved spørring returneres 0 eller 1.
+Numeric values may be entered in any form: sign, decimal point and exponent. Values exceeding the instrument's resolution are rounded up or down. The mantissa may consist of up to 15 characters, and the exponent must lie in the range -307 to 307. The exponent is introduced by `E` or `e`. Entering the exponent alone is not permitted. For physical quantities with a unit, no unit is accepted — the base unit is used.
 
 ```
-Innstillingskommando: SYNC:STATe ON
-Spørring:             SYNC:STATe?
-Respons:              1
+SENSe:VOLTage1:RANGe 1000.0    sets range 1000 V
 ```
 
-##### Tekst
+##### Boolean parameters
 
-Tekstparametre følger de syntaktiske reglene for nøkkelord. De kan angis i kort eller lang form. Som alle andre parametre må de skilles fra headeren med et "white space". Ved spørring returneres kortformen av teksten.
+Boolean parameters represent two states. The ON state (logically true) is represented by `ON` or a numeric value other than 0. The OFF state (logically false) is represented by `OFF` or the numeric value 0. On query, 0 or 1 is returned.
 
 ```
-Innstillingskommando: INPut1:SHUNt EXTernal
-Spørring:             INPut1:SHUNt?
-Respons:              EXT
+Setting command: SYNC:STATe ON
+Query:           SYNC:STATe?
+Response:        1
 ```
 
-##### Strenger
+##### Text
 
-Strenger må alltid angis i anførselstegn (`'` eller `"`).
+Text parameters follow the syntactic rules for keywords. They can be given in short or long form. Like all other parameters they must be separated from the header by a "white space". On query, the short form of the text is returned.
+
+```
+Setting command: INPut1:SHUNt EXTernal
+Query:           INPut1:SHUNt?
+Response:        EXT
+```
+
+##### Strings
+
+Strings must always be given in quotation marks (`'` or `"`).
 
 ```
 ROUTe:SYSTem "3W"
 ROUTe:SYSTem '3W'
 ```
 
-##### Blokkdata
+##### Block data
 
-Blokkdata er et overføringsformat som egner seg for overføring av store datamengder fra instrumentet til kontrolleren. Blokkdata har følgende struktur:
+Block data is a transfer format suited to transferring large amounts of data from the instrument to the controller. Block data has the following structure:
 
 ```
 #40008xxxxxxxx
 ```
 
-Datablokken innledes med ASCII-tegnet `#`. Neste tall angir hvor mange av de påfølgende sifrene som beskriver lengden på datablokken. I eksempelet angir de fire påfølgende sifrene at lengden er 8 byte (foranstilte nuller ignoreres). Deretter følger databytene. Under overføringen av databytene ignoreres alle End- og andre kontrolltegn til alle byte er overført. Dataelementer som består av mer enn én byte, overføres med den byten først som er spesifisert av SCPI-kommandoen `FORMat:BORDer`. Den interne strukturen på dataene i blokken avhenger av den faktiske instrumentkonfigurasjonen.
+The data block is introduced by the ASCII character `#`. The next digit states how many of the following digits describe the length of the data block. In the example, the four following digits state that the length is 8 bytes (leading zeros are ignored). The data bytes then follow. During the transfer of the data bytes, all End and other control characters are ignored until all bytes have been transferred. Data elements consisting of more than one byte are transferred with the byte specified by the SCPI command `FORMat:BORDer` first. The internal structure of the data in the block depends on the actual instrument configuration.
 
-#### Oversikt over syntakselementer
+#### Overview of syntax elements
 
-| Element | Betydning |
-|---------|-----------|
-| `:` | Kolon skiller nøkkelordene i en kommando. I en kommandolinje markerer det etter skille-semikolonet det øverste kommandonivået. |
-| `;` | Semikolon skiller to kommandoer i en kommandolinje. Det endrer ikke stien. |
-| `,` | Komma skiller flere parametre i en kommando. |
-| `?` | Spørsmålstegn danner en spørring. |
-| `*` | Asterisk markerer en fellesskommando (common command). |
-| `"` | Anførselstegn innleder og avslutter en streng. |
-| `#` | ASCII-tegnet `#` innleder blokkdata. |
-| white space | Et "white space" (ASCII-kode 0 til 9, 11 til 32 desimalt, blank) skiller header og parameter. |
+| Element | Meaning |
+|---------|---------|
+| `:` | The colon separates the keywords in a command. In a command line, after the separating semicolon it marks the topmost command level. |
+| `;` | The semicolon separates two commands in a command line. It does not change the path. |
+| `,` | The comma separates several parameters in a command. |
+| `?` | The question mark forms a query. |
+| `*` | The asterisk marks a common command. |
+| `"` | Quotation marks introduce and terminate a string. |
+| `#` | The ASCII character `#` introduces block data. |
+| white space | A "white space" (ASCII code 0 to 9, 11 to 32 decimal, blank) separates header and parameter. |
 
-### Instrumentmodell og kommandoprosessering
+### Instrument model and command processing
 
-Behandlingen av grensesnittkommandoene skjer i flere komponenter som arbeider uavhengig av hverandre og samtidig, og som kommuniserer med hverandre via meldinger (manualens figur 1-2):
+Processing of the interface commands takes place in several components that work independently of each other and concurrently, and that communicate with each other via messages (figure 1-2 in the manual):
 
 ```
-Grensesnitt ──> Input unit (med input buffer) ──> Command recognition ──> Data set ──> Instrument hardware
-                                                          │                  │
-                                                          v                  v
-Grensesnitt <── Output unit (med output buffer) <── Status reporting system
+Interface ──> Input unit (with input buffer) ──> Command recognition ──> Data set ──> Instrument hardware
+                                                        │                   │
+                                                        v                   v
+Interface <── Output unit (with output buffer) <── Status reporting system
 ```
 
-#### Input unit (inngangsenhet)
+#### Input unit
 
-Inngangsenheten mottar kommandoer, tegn for tegn, fra grensesnittet og lagrer dem i inngangsbufferet. **Inngangsbufferet har en størrelse på 2048 tegn.** Inngangsenheten sender en melding til kommandogjenkjenningen når inngangsbufferet er fullt, eller når den mottar en terminator, `<PROGRAM MESSAGE TERMINATOR>` som definert i IEEE 488.2, eller grensesnittmeldingen DCL (kun GPIB).
+The input unit receives commands, character by character, from the interface and stores them in the input buffer. **The input buffer has a size of 2048 characters.** The input unit sends a message to the command recognition when the input buffer is full, or when it receives a terminator, `<PROGRAM MESSAGE TERMINATOR>` as defined in IEEE 488.2, or the interface message DCL (GPIB only).
 
-Hvis inngangsbufferet er fullt, stoppes grensesnittrafikken og dataene som er mottatt til da behandles; deretter fortsetter trafikken. Hvis bufferet ikke er fullt ved mottak av en terminator, kan inngangsenheten motta neste kommando mens kommandogjenkjenning og -utførelse pågår. Mottak av DCL (kun GPIB) tømmer inngangsbufferet og sender umiddelbart en melding til kommandogjenkjenningen.
+If the input buffer is full, interface traffic is stopped and the data received so far is processed; traffic then continues. If the buffer is not full when a terminator is received, the input unit can receive the next command while command recognition and execution are in progress. Receiving DCL (GPIB only) clears the input buffer and immediately sends a message to the command recognition.
 
-#### Command recognition (kommandogjenkjenning)
+#### Command recognition
 
-Kommandogjenkjenningen analyserer dataene fra inngangsenheten i mottaksrekkefølge. Bare DCL-kommandoer (kun GPIB) behandles med prioritet; GET-kommandoer (Group Execute Trigger, kun GPIB) behandles først etter tidligere mottatte kommandoer. Hver gjenkjent kommando overføres umiddelbart til datasettet, men uten å bli utført der med én gang.
+The command recognition analyses the data from the input unit in the order received. Only DCL commands (GPIB only) are processed with priority; GET commands (Group Execute Trigger, GPIB only) are processed only after previously received commands. Each recognized command is transferred immediately to the data set, but without being executed there right away.
 
-Syntaktiske feil i kommandoer oppdages her og overføres til statusrapporteringssystemet. Resten av en kommandolinje etter en syntaksfeil analyseres og behandles videre så langt det er mulig.
+Syntax errors in commands are detected here and passed to the status reporting system. The remainder of a command line after a syntax error is analysed and processed further as far as possible.
 
-Når kommandogjenkjenningen gjenkjenner en terminator eller en DCL-kommando (kun GPIB), ber den datasettet om å sette kommandoene også i instrumentmaskinvaren. Deretter er den umiddelbart klar til å fortsette kommandobehandlingen. Det betyr at nye kommandoer kan behandles mens maskinvaren settes ("overlappende utførelse"). **Merk: For dette instrumentet utføres for tiden alle kommandoer ikke-overlappende (= sekvensielt).**
+When the command recognition recognizes a terminator or a DCL command (GPIB only), it asks the data set to set the commands in the instrument hardware as well. It is then immediately ready to continue command processing. This means new commands can be processed while the hardware is being set ("overlapped execution"). **Note: For this instrument, all commands are currently executed non-overlapped (= sequentially).**
 
-#### Data set og instrument hardware (datasett og instrumentmaskinvare)
+#### Data set and instrument hardware
 
-Begrepet "instrumentmaskinvare" betegner den delen av instrumentet som faktisk utfører instrumentfunksjonene: signalgenerering, måling osv. Kontrolleren er ikke inkludert.
+The term "instrument hardware" denotes the part of the instrument that actually performs the instrument functions: signal generation, measurement and so on. The controller is not included.
 
-Datasettet er en detaljert gjengivelse av instrumentmaskinvaren i programvaren. Innstillingskommandoer fra grensesnittet fører til endring av datasettet. Datasettforvaltningen legger de nye verdiene (for eksempel frekvens) inn i datasettet, men gir dem videre til maskinvaren først på forespørsel fra kommandogjenkjenningen. Siden dette bare skjer ved slutten av en kommandolinje, er rekkefølgen på innstillingskommandoene i kommandolinjen ikke relevant.
+The data set is a detailed representation of the instrument hardware in software. Setting commands from the interface cause the data set to change. The data set management enters the new values (for example frequency) into the data set, but only passes them on to the hardware when requested by the command recognition. Since this only happens at the end of a command line, the order of the setting commands within the command line is irrelevant.
 
-Dataene sjekkes for kompatibilitet med hverandre og med instrumentmaskinvaren først umiddelbart før de overføres til maskinvaren. Hvis det viser seg at utførelse ikke er mulig, signaliseres en "execution error" til statusrapporteringssystemet. Alle endringer i datasettet forkastes, og instrumentmaskinvaren tilbakestilles ikke. På grunn av den forsinkede kontrollen og maskinvareinnstillingen er det tillatt at ugyldige instrumenttilstander kortvarig settes innenfor en kommandolinje uten at det gis feilmelding — men ved slutten av kommandolinjen må en gyldig instrumenttilstand være oppnådd.
+The data is checked for compatibility with each other and with the instrument hardware only immediately before it is transferred to the hardware. If it turns out that execution is not possible, an "execution error" is signalled to the status reporting system. All changes to the data set are discarded and the instrument hardware is not reset. Because of the deferred check and hardware setting, it is permitted for invalid instrument states to be set briefly within a command line without an error message being issued — but at the end of the command line a valid instrument state must have been reached.
 
-Før dataene gis videre til maskinvaren, settes settling-biten i `STATus:OPERation`-registeret. Maskinvaren gjør innstillingene og nullstiller biten når den nye tilstanden har stabilisert seg. Denne mekanismen kan brukes til synkronisering av kommandobehandlingen.
+Before the data is passed on to the hardware, the settling bit in the `STATus:OPERation` register is set. The hardware makes the settings and clears the bit once the new state has settled. This mechanism can be used for synchronizing command processing.
 
-#### Status reporting system (statusrapporteringssystem)
+#### Status reporting system
 
-Statusrapporteringssystemet samler informasjon om instrumenttilstanden og gjør den tilgjengelig for utgangsenheten på forespørsel. En detaljert beskrivelse av struktur og funksjon gis i manualens kapittel 2.
+The status reporting system collects information about the instrument state and makes it available to the output unit on request. A detailed description of its structure and function is given in chapter 2 of the manual.
 
-#### Output unit (utgangsenhet)
+#### Output unit
 
-Utgangsenheten samler informasjonen som kontrolleren har bedt om og som datasettforvaltningen leverer. Den behandler informasjonen etter SCPI-reglene og gjør den tilgjengelig i utgangsbufferet. **Utgangsbufferet har en størrelse på 2048 tegn.** Hvis den etterspurte informasjonen overskrider denne størrelsen, gjøres den tilgjengelig i porsjoner uten at kontrolleren merker det.
+The output unit collects the information requested by the controller and delivered by the data set management. It processes the information according to the SCPI rules and makes it available in the output buffer. **The output buffer has a size of 2048 characters.** If the requested information exceeds this size, it is made available in portions without the controller noticing.
 
-Hvis instrumentet adresseres som talker uten at utgangsbufferet inneholder data eller venter på data fra datasettforvaltningen, returnerer utgangsenheten feilmeldingen "Query UNTERMINATED" til statusrapporteringssystemet. Ingen data sendes på grensesnittet, og kontrolleren venter til dens tidsgrense (timeout) er nådd. Denne fremgangsmåten er spesifisert av SCPI.
+If the instrument is addressed as a talker without the output buffer containing data or waiting for data from the data set management, the output unit returns the error message "Query UNTERMINATED" to the status reporting system. No data is sent on the interface, and the controller waits until its timeout is reached. This behaviour is specified by SCPI.
 
-Grensesnittspørringer gjør at datasettforvaltningen sender de ønskede dataene til utgangsenheten.
+Interface queries cause the data set management to send the requested data to the output unit.
 
-### Kommandosekvens og kommandosynkronisering
+### Command sequence and command synchronization
 
-Som nevnt ovenfor er overlappende utførelse mulig for alle kommandoer. Likeledes behandles innstillingskommandoene i en kommandolinje ikke nødvendigvis i den rekkefølgen de er mottatt. For å sikre at kommandoer utføres i en bestemt rekkefølge, må hver kommando sendes i en egen kommandolinje med et eget viWrite-kall (viPrintf, viQueryf).
+As mentioned above, overlapped execution is possible for all commands. Likewise, the setting commands in a command line are not necessarily processed in the order received. To ensure commands are executed in a particular order, each command must be sent in its own command line with its own viWrite call (viPrintf, viQueryf).
 
-For å hindre overlappende utførelse av kommandoer må én av kommandoene `*OPC`, `*OPC?` eller `*WAI` brukes. Hver av de tre kommandoene utløser en bestemt handling først etter at maskinvaren er satt og har stabilisert seg. Kontrolleren kan programmeres til å vente på den respektive handlingen (se tabell 1-1).
+To prevent overlapped execution of commands, one of the commands `*OPC`, `*OPC?` or `*WAI` must be used. Each of the three commands triggers a particular action only after the hardware has been set and has settled. The controller can be programmed to wait for the respective action (see table 1-1).
 
-**Tabell 1-1. Synkronisering med *OPC, *OPC? og *WAI**
+**Table 1-1. Synchronization with *OPC, *OPC? and *WAI**
 
-| Kommando | Handling etter at maskinvaren har stabilisert seg | Programmering av kontrolleren |
-|----------|---------------------------------------------------|-------------------------------|
-| `*OPC` | Setter operation-complete-biten i ESR | - Sette bit 0 i ESE<br>- Sette bit 5 i SRE<br>- Vente på service request (SRQ) |
-| `*OPC?` | Skriver en "1" i utgangsbufferet | Adressere instrumentet som talker |
-| `*WAI` | Fortsetter IEC/IEEE-buss-handshaken. Handshaken stoppes ikke. | Sende neste kommando |
+| Command | Action after the hardware has settled | Controller programming |
+|---------|---------------------------------------|------------------------|
+| `*OPC` | Sets the operation-complete bit in the ESR | - Set bit 0 in the ESE<br>- Set bit 5 in the SRE<br>- Wait for service request (SRQ) |
+| `*OPC?` | Writes a "1" into the output buffer | Address the instrument as a talker |
+| `*WAI` | Continues the IEC/IEEE bus handshake. The handshake is not stopped. | Send the next command |
 
-Et eksempel på kommandosynkronisering finnes i manualens kapittel 6.
+An example of command synchronization is found in chapter 6 of the manual.
 
-> **Merk:** Kommandosynkroniseringskommandoene fungerer, men er for tiden ikke nødvendige, siden instrumentet utfører alle kommandoer sekvensielt.
+> **Note:** The command synchronization commands work, but are currently not necessary, since the instrument executes all commands sequentially.
 
-## Felleskommandoer og målefunksjoner
+## Common commands and measurement functions
 
-Dette kapittelet beskriver alle kommandoer som er implementert i instrumentet. Kommandoene listes først i tabeller og beskrives deretter i detalj, ordnet etter kommandosubsystemene. Notasjonen følger SCPI-standarden, og SCPI-konformitetsinformasjon er inkludert i den enkelte kommandobeskrivelsen.
+This chapter describes all commands implemented in the instrument. The commands are first listed in tables and then described in detail, organized by command subsystem. The notation follows the SCPI standard, and SCPI conformance information is included in each command description.
 
-**Alle kommandoer kan brukes for styring via alle grensesnitt** (inkludert TCP/socket-grensesnittet).
+**All commands can be used for control via every interface** (including the TCP/socket interface).
 
-### Felleskommandoer (Common Commands)
+### Common commands
 
-Felleskommandoene er hentet fra standarden IEEE 488.2 (IEC 625-2). En gitt kommando har samme effekt på ulike enheter. Headeren til disse kommandoene består av en asterisk `*` etterfulgt av tre bokstaver. Mange felleskommandoer refererer til statusrapporteringssystemet som er beskrevet i kapittel 2.
+The common commands are taken from the IEEE 488.2 (IEC 625-2) standard. A given command has the same effect on different devices. The header of these commands consists of an asterisk `*` followed by three letters. Many common commands refer to the status reporting system described in chapter 2.
 
-#### Oversikt
+#### Overview
 
-| Kommando | Parameter | Funksjon | Kommentar |
+| Command | Parameter | Function | Comment |
 |---|---|---|---|
-| `*CLS` | – | Clear Status | ingen spørring |
-| `*ESE` | 0 til 255 | Event Status Enable | |
-| `*ESR?` | – | Standard Event Status Query | kun spørring |
-| `*IDN?` | – | Identification Query | kun spørring |
+| `*CLS` | – | Clear Status | no query |
+| `*ESE` | 0 to 255 | Event Status Enable | |
+| `*ESR?` | – | Standard Event Status Query | query only |
+| `*IDN?` | – | Identification Query | query only |
 | `*OPC` | – | Operation Complete | |
 | `*OPC?` | – | Operation Complete Query | |
-| `*OPT?` | – | Option Identification Query | kun spørring |
-| `*RST` | – | Reset | ingen spørring |
-| `*SRE` | 0 til 255 | Service Request Enable | |
-| `*STB?` | – | Status Byte Query | kun spørring |
-| `*WAI` | – | Wait to continue | ingen spørring |
-| `*SAV` | 10 til 24 | Save User Setup | ingen spørring |
-| `*RCL` | 1 til 9 / 10 til 24 | Recall Standard Setup / Recall User Setup | ingen spørring |
-| `*LRN?` | – | Learn Setup String | kun spørring |
-| `*TRG` | – | Trigger | ingen spørring |
+| `*OPT?` | – | Option Identification Query | query only |
+| `*RST` | – | Reset | no query |
+| `*SRE` | 0 to 255 | Service Request Enable | |
+| `*STB?` | – | Status Byte Query | query only |
+| `*WAI` | – | Wait to continue | no query |
+| `*SAV` | 10 to 24 | Save User Setup | no query |
+| `*RCL` | 1 to 9 / 10 to 24 | Recall Standard Setup / Recall User Setup | no query |
+| `*LRN?` | – | Learn Setup String | query only |
+| `*TRG` | – | Trigger | no query |
 
-#### Detaljert beskrivelse
+#### Detailed description
 
 ##### `*CLS`
 
-CLEAR STATUS setter statusbyten (STB), standard hendelsesregister (ESR) og EVENt-delen av QUEStionable- og OPERation-registrene til null. Kommandoen endrer ikke maske- og transisjonsdelene av registrene. Den tømmer utgangsbufferen.
+CLEAR STATUS sets the status byte (STB), the standard event register (ESR) and the EVENt part of the QUEStionable and OPERation registers to zero. The command does not change the mask and transition parts of the registers. It clears the output buffer.
 
 ##### `*ESE 0 to 255`
 
-EVENT STATUS ENABLE setter event status enable-registeret til den angitte verdien. Spørreformen `*ESE?` returnerer innholdet i event status enable-registeret i desimalform.
+EVENT STATUS ENABLE sets the event status enable register to the value given. The query form `*ESE?` returns the contents of the event status enable register in decimal form.
 
 ##### `*ESR?`
 
-STANDARD EVENT STATUS QUERY returnerer innholdet i hendelsesstatusregisteret i desimalform (0 til 255) og setter deretter registeret til null.
+STANDARD EVENT STATUS QUERY returns the contents of the event status register in decimal form (0 to 255) and then sets the register to zero.
 
 ##### `*IDN?`
 
-IDENTIFICATION QUERY spør etter instrumentidentifikasjonen. Responsen er for eksempel:
+IDENTIFICATION QUERY asks for the instrument identification. The response is, for example:
 
 ```
 "Fluke,NORMA4000,KN34512BA,01.00"
 ```
 
-- `KN34512BA` = instrumentets serienummer
-- `01.00` = fastvareversjonsnummer
+- `KN34512BA` = the instrument's serial number
+- `01.00` = firmware version number
 
 ##### `*OPC`
 
-OPERATION COMPLETE setter bit 0 i hendelsesstatusregisteret når alle foregående kommandoer er utført. Denne biten kan brukes til å utløse en service request.
+OPERATION COMPLETE sets bit 0 in the event status register when all preceding commands have been executed. This bit can be used to trigger a service request.
 
 ##### `*OPC?`
 
-OPERATION COMPLETE QUERY skriver meldingen `"1"` til utgangsbufferen så snart alle foregående kommandoer er utført.
+OPERATION COMPLETE QUERY writes the message `"1"` to the output buffer as soon as all preceding commands have been executed.
 
 ##### `*OPT?`
 
-OPTION IDENTIFICATION QUERY spør etter opsjonene som er inkludert i instrumentet og returnerer en liste over installerte opsjoner. Opsjonene skilles fra hverandre med komma. Kommandoen ber om identifikasjon av enhetens opsjoner. Eksempel på respons fra enheten:
+OPTION IDENTIFICATION QUERY asks for the options included in the instrument and returns a list of installed options. The options are separated from each other by commas. The command requests identification of the device's options. Example response from the device:
 
 ```
 "Option1,Option2"
@@ -754,228 +754,228 @@ OPTION IDENTIFICATION QUERY spør etter opsjonene som er inkludert i instrumente
 
 ##### `*RST`
 
-RESET setter instrumentet til en definert standardtilstand. Standardinnstillingen er angitt i beskrivelsen av de enkelte kommandoene.
+RESET sets the instrument to a defined default state. The default setting is stated in the description of each individual command.
 
 ##### `*SRE 0 to 255`
 
-SERVICE REQUEST ENABLE setter service request enable-registeret til den angitte verdien. Bit 6 (MSS-maskebit) forblir 0. Denne kommandoen bestemmer under hvilke betingelser en service request genereres. Spørreformen `*SRE?` leser innholdet i service request enable-registeret i desimalform. Bit 6 er alltid 0.
+SERVICE REQUEST ENABLE sets the service request enable register to the value given. Bit 6 (the MSS mask bit) remains 0. This command determines under which conditions a service request is generated. The query form `*SRE?` reads the contents of the service request enable register in decimal form. Bit 6 is always 0.
 
 ##### `*STB?`
 
-READ STATUS BYTE QUERY leser ut innholdet i statusbyten i desimalform.
+READ STATUS BYTE QUERY reads out the contents of the status byte in decimal form.
 
 ##### `*TRG`
 
-TRIGGER starter målingen umiddelbart hvis instrumentet er i single-shot-modus (`INITiate:CONTinuous OFF`). Denne kommandoen tilsvarer `INITiate:IMMediate` (se avsnittet «TRIGger subsystem»). Hvis minneopptak (memory recording) er konfigurert, forbikobles ARM- og TRIGger-lagene, og instrumentet begynner umiddelbart å lagre data. Synkroniseringsbetingelsen må være oppfylt hvis synkronisering er ON.
+TRIGGER starts the measurement immediately if the instrument is in single-shot mode (`INITiate:CONTinuous OFF`). This command corresponds to `INITiate:IMMediate` (see the "TRIGger subsystem" section). If memory recording is configured, the ARM and TRIGger layers are bypassed and the instrument starts storing data immediately. The synchronization condition must be met if synchronization is ON.
 
 ##### `*WAI`
 
-WAIT-to-CONTINUE tillater behandling av påfølgende kommandoer først etter at alle foregående kommandoer er utført og alle signaler har stabilisert seg.
+WAIT-to-CONTINUE allows processing of subsequent commands only after all preceding commands have been executed and all signals have settled.
 
 ##### `*SAV 10 to 24`
 
-SAVE SETUP lagrer instrumentoppsettet i det angitte brukerkonfigurasjonsminnet.
+SAVE SETUP stores the instrument setup in the specified user configuration memory.
 
 ##### `*RCL 1 to 24`
 
-RECALL SETUP henter instrumentoppsett fra det angitte konfigurasjonsminnet (1 til 9 = standardoppsett, 10 til 24 = brukeroppsett).
+RECALL SETUP retrieves an instrument setup from the specified configuration memory (1 to 9 = standard setups, 10 to 24 = user setups).
 
 ##### `*LRN?`
 
-LEARN SETUP STRING spør etter komplett instrumentoppsett. Oppsettet returneres som en sekvens av semikolonseparerte kommandoer. Hvis denne sekvensen sendes tilbake til instrumentet, gjenopprettes instrumentkonfigurasjonen fullstendig.
+LEARN SETUP STRING asks for the complete instrument setup. The setup is returned as a sequence of semicolon-separated commands. If this sequence is sent back to the instrument, the instrument configuration is fully restored.
 
-### Målefunksjoner (Measurement Functions)
+### Measurement functions
 
-`<function>` er en hierarkisk målefunksjon som angir hvilken type midlet elektrisk størrelse instrumentet skal konfigureres til å måle. Én verdi av `<function>` beregnes over én midlingssyklus i instrumentet. Ved bruk av `[SENSe:]FUNCtion`-subsystemet kan flere funksjoner måles/beregnes samtidig. `<function>` har følgende syntaks:
+`<function>` is a hierarchical measurement function that states which type of averaged electrical quantity the instrument is to be configured to measure. One value of `<function>` is computed over one averaging cycle in the instrument. Using the `[SENSe:]FUNCtion` subsystem, several functions can be measured/computed simultaneously. `<function>` has the following syntax:
 
 ```
 <function> ::= "<function_name>"
 ```
 
-Brukt med `[SENSe:]FUNCtion`-subsystemet er `<function_name>` STRING PROGRAM DATA, dvs. funksjonsnavnene omsluttes av doble anførselstegn. Hvis flere funksjoner angis, må hvert funksjonsnavn stå i egne anførselstegn.
+Used with the `[SENSe:]FUNCtion` subsystem, `<function_name>` is STRING PROGRAM DATA, i.e. the function names are enclosed in double quotation marks. If several functions are given, each function name must be in its own quotation marks.
 
-Eksempel:
+Example:
 
 ```
-FUNC "VOLT1:DC"                          Mål True RMS på fase 1
-FUNC "VOLT1:AC", "VOLT2:AC", "VOLT3:AC"  Mål RMS på fase 1, 2 og 3
+FUNC "VOLT1:DC"                          Measure True RMS on phase 1
+FUNC "VOLT1:AC", "VOLT2:AC", "VOLT3:AC"  Measure RMS on phases 1, 2 and 3
 ```
 
-Når en `<function>` returneres som svar på en spørring, inneholder den ingen mellomrom. Mnemonikkene i spørreresponsen bruker kortform med standardnoder utelatt. Alle bokstaver i responsen er store (uppercase).
+When a `<function>` is returned in response to a query, it contains no spaces. The mnemonics in the query response use the short form with default nodes omitted. All letters in the response are upper case.
 
-#### Fasesuffikser
+#### Phase suffixes
 
-Den første noden i funksjonsnavnet har et numerisk heltallssuffiks som brukes til å skille mellom fasene i et flerfasesystem. Gyldige suffikser:
+The first node of the function name takes an integer numeric suffix used to distinguish between the phases in a polyphase system. Valid suffixes:
 
-| Suffiks | Fase |
+| Suffix | Phase |
 |---|---|
 | 1 | L1 |
 | 2 | L2 |
 | 3 | L3 |
-| 4 | L4 på NORMA 5000-modellen |
-| 5 | L5 på NORMA 5000-modellen |
-| 6 | L6 på NORMA 5000-modellen |
-| 12 | fase-til-fase-spenning L1 – L2 |
-| 13 | fase-til-fase-spenning L1 – L3 (kun W2-system) |
-| 23 | fase-til-fase-spenning L2 – L3 |
-| 31 | fase-til-fase-spenning L3 – L1 (kun W3-system) |
-| 45 | fase-til-fase-spenning L4 – L5 (N5000-modellen) |
-| 56 | fase-til-fase-spenning L5 – L6 (N5000-modellen) |
-| 64 | fase-til-fase-spenning L6 – L4 (N5000-modellen) |
-| (uten suffiks) | Gjennomsnitts-/total-/samleverdi fra kanalene i 1. trefasesystem (fase 1 … fase 3), eller 1. tofasesystem (fase 1 … fase 2) når to-wattmeter-konfigurasjon (2W/Aron) er aktiv |
-| 460 | Gjennomsnitts-/total-/samleverdi fra kanalene i 2. trefasesystem (fase 4 … fase 6) |
-| 123 | Gjennomsnittlig fase-til-fase-spenning i 1. trefasesystem (fase 1 … fase 3), eller 1. tofasesystem (fase 1 … fase 2) når to-wattmeter-konfigurasjon (2W/Aron) er aktiv |
-| 456 | Gjennomsnittlig fase-til-fase-spenning i 2. trefasesystem (fase 4 … fase 6) |
+| 4 | L4 on the NORMA 5000 model |
+| 5 | L5 on the NORMA 5000 model |
+| 6 | L6 on the NORMA 5000 model |
+| 12 | phase-to-phase voltage L1 – L2 |
+| 13 | phase-to-phase voltage L1 – L3 (W2 system only) |
+| 23 | phase-to-phase voltage L2 – L3 |
+| 31 | phase-to-phase voltage L3 – L1 (W3 system only) |
+| 45 | phase-to-phase voltage L4 – L5 (N5000 model) |
+| 56 | phase-to-phase voltage L5 – L6 (N5000 model) |
+| 64 | phase-to-phase voltage L6 – L4 (N5000 model) |
+| (no suffix) | Average/total/aggregate value from the channels in the 1st three-phase system (phase 1 … phase 3), or the 1st two-phase system (phase 1 … phase 2) when the two-wattmeter configuration (2W/Aron) is active |
+| 460 | Average/total/aggregate value from the channels in the 2nd three-phase system (phase 4 … phase 6) |
+| 123 | Average phase-to-phase voltage in the 1st three-phase system (phase 1 … phase 3), or the 1st two-phase system (phase 1 … phase 2) when the two-wattmeter configuration (2W/Aron) is active |
+| 456 | Average phase-to-phase voltage in the 2nd three-phase system (phase 4 … phase 6) |
 
-#### MINimum/MAXimum og IPOSitive/INEGative/INTegral
+#### MINimum/MAXimum and IPOSitive/INEGative/INTegral
 
-Den valgfrie **MINimum/MAXimum**-delen av funksjonsnavnet angir at ekstremverdien til funksjonen skal returneres. Etter hver midlingssyklus sammenlignes den nye middelverdien mot MIN/MAX-registrene, slik at ekstremverdiene akkumuleres over mange midlingssykluser inntil de nullstilles med en egen kommando.
+The optional **MINimum/MAXimum** part of the function name states that the extreme value of the function is to be returned. After each averaging cycle the new mean value is compared against the MIN/MAX registers, so that the extreme values accumulate over many averaging cycles until they are cleared with a dedicated command.
 
-MINimum/MAXimum-egenskapen er ikke det samme som PHIGH/PLOW: PHIGH/PLOW returnerer høyeste/laveste samplede verdi funnet innenfor det gjeldende midlingsintervallet.
+The MINimum/MAXimum feature is not the same as PHIGH/PLOW: PHIGH/PLOW return the highest/lowest sampled value found within the current averaging interval.
 
-MINimum/MAXimum-egenskapen må aktiveres i CALCulate-subsystemet før den kan brukes som del av en `<function>`.
+The MINimum/MAXimum feature must be enabled in the CALCulate subsystem before it can be used as part of a `<function>`.
 
-> Merk: MINimum/MAXimum-opsjonene er per manualen foreløpig ikke implementert («currently unimplemented»).
+> Note: Per the manual, the MINimum/MAXimum options are currently unimplemented.
 
-Den valgfrie **IPOSitive/INEGative/INTegral**-delen av funksjonsnavnet angir at summert verdi (integral) av funksjonen skal returneres:
+The optional **IPOSitive/INEGative/INTegral** part of the function name states that the summed value (integral) of the function is to be returned:
 
-- `IPOSitive` – kun de positive verdiene av funksjonen summeres
-- `INEGative` – kun de negative verdiene av funksjonen summeres
-- `INTegral` – summen av begge
+- `IPOSitive` – only the positive values of the function are summed
+- `INEGative` – only the negative values of the function are summed
+- `INTegral` – the sum of both
 
-IPOSitive/INEGative/INTegral-egenskapen må aktiveres i CALCulate-subsystemet før den kan brukes som del av en `<function>`. De integrerte verdiene kan nullstilles med kommandoen `CALCulate:INTegral:CLEar[:IMMediate]`.
+The IPOSitive/INEGative/INTegral feature must be enabled in the CALCulate subsystem before it can be used as part of a `<function>`. The integrated values can be cleared with the command `CALCulate:INTegral:CLEar[:IMMediate]`.
 
-#### Grunninstrumentets målefunksjoner (Base Instrument Measurement Functions)
+#### Base instrument measurement functions
 
-> Merk: Hvis W2-system er valgt, erstattes `VOLTage31` av `VOLTage13`.
+> Note: If the W2 system is selected, `VOLTage31` is replaced by `VOLTage13`.
 
-| Funksjon (størrelse) | Kommando | Uten suffiks (1. system) eller med 460 (2. system) |
+| Function (quantity) | Command | No suffix (1st system) or with 460 (2nd system) |
 |---|---|---|
 | True RMS Voltage | `VOLTage[1..6\|460][:DC][:MINimum\|MAXimum]` | Average Voltage trms |
-| RMS uten DC-komponent | `VOLTage[1..6\|460]:AC[:MINimum\|MAXimum]` | Average Voltage rms |
-| True RMS fase-til-fase-spenning | `VOLTage[12\|23\|31\|45\|56\|64][:DC][:MINimum\|MAXimum]` | |
-| Rectified Mean fase-til-fase-spenning | `VOLTage[12\|23\|31\|45\|56\|64]:RMEAN[:MINimum\|MAXimum]` | |
-| Rectified Mean fase-til-fase-spenning, korrigert | `VOLTage[12\|23\|31\|45\|56\|64]:RMCORR[:MINimum\|MAXimum]` | |
-| Fase-til-fase spenningsharmonisk | `VOLTage[12\|23\|31\|45\|56\|64]:HAR[:MINimum\|MAXimum]` | |
-| Fase-til-fase spenning, formfaktor | `VOLTage[12\|23\|31\|45\|56\|64]:FFACtor[:MINimum\|MAXimum]` | |
-| Fase-til-fase spennings-THD | `VOLTage[12\|23\|31\|45\|56\|64]:THD[:MINimum\|MAXimum]` | |
-| Fase-til-fase spenning, harmonisk innhold | `VOLTage[12\|23\|31\|45\|56\|64]:HCONTent[:MINimum\|MAXimum]` | |
-| Fase-til-fase spenning, grunnharmonisk innhold | `VOLTage[12\|23\|31\|45\|56\|64]:FCONTent[:MINimum\|MAXimum]` | |
-| Fase-til-fase absolutt spenningsfase | `VOLTage[12\|23\|31\|45\|56\|64]:PHASe[:MINimum\|:MAXimum]` | |
-| Gjennomsnittlig true RMS fase-til-fase-spenning | `VOLTage123\|456[:DC][:MINimum\|MAXimum]` | |
-| Gjennomsnittlig Mean fase-til-fase-spenning | `VOLTage123\|456:MEAN[:MINimum\|MAXimum]` | |
-| Gjennomsnittlig Rectified Mean fase-til-fase-spenning | `VOLTage123\|456:RMEAN[:MINimum\|MAXimum]` | |
-| Gjennomsnittlig Rectified Mean fase-til-fase-spenning, korrigert | `VOLTage123\|456:RMCORR[:MINimum\|MAXimum]` | |
-| Gjennomsnittlig fase-til-fase spenningsharmonisk | `VOLTage123\|456:HAR[:MINimum\|MAXimum]` | |
-| Middelverdi av spenning | `VOLTage[1..6\|460]:MEAN[:MINimum\|MAXimum\|IPOSitive\|INEGative\|INTegral]` | Average Mean Voltage |
+| RMS without DC component | `VOLTage[1..6\|460]:AC[:MINimum\|MAXimum]` | Average Voltage rms |
+| True RMS phase-to-phase voltage | `VOLTage[12\|23\|31\|45\|56\|64][:DC][:MINimum\|MAXimum]` | |
+| Rectified Mean phase-to-phase voltage | `VOLTage[12\|23\|31\|45\|56\|64]:RMEAN[:MINimum\|MAXimum]` | |
+| Rectified Mean phase-to-phase voltage, corrected | `VOLTage[12\|23\|31\|45\|56\|64]:RMCORR[:MINimum\|MAXimum]` | |
+| Phase-to-phase voltage harmonic | `VOLTage[12\|23\|31\|45\|56\|64]:HAR[:MINimum\|MAXimum]` | |
+| Phase-to-phase voltage, form factor | `VOLTage[12\|23\|31\|45\|56\|64]:FFACtor[:MINimum\|MAXimum]` | |
+| Phase-to-phase voltage THD | `VOLTage[12\|23\|31\|45\|56\|64]:THD[:MINimum\|MAXimum]` | |
+| Phase-to-phase voltage, harmonic content | `VOLTage[12\|23\|31\|45\|56\|64]:HCONTent[:MINimum\|MAXimum]` | |
+| Phase-to-phase voltage, fundamental content | `VOLTage[12\|23\|31\|45\|56\|64]:FCONTent[:MINimum\|MAXimum]` | |
+| Phase-to-phase absolute voltage phase | `VOLTage[12\|23\|31\|45\|56\|64]:PHASe[:MINimum\|:MAXimum]` | |
+| Average true RMS phase-to-phase voltage | `VOLTage123\|456[:DC][:MINimum\|MAXimum]` | |
+| Average Mean phase-to-phase voltage | `VOLTage123\|456:MEAN[:MINimum\|MAXimum]` | |
+| Average Rectified Mean phase-to-phase voltage | `VOLTage123\|456:RMEAN[:MINimum\|MAXimum]` | |
+| Average Rectified Mean phase-to-phase voltage, corrected | `VOLTage123\|456:RMCORR[:MINimum\|MAXimum]` | |
+| Average phase-to-phase voltage harmonic | `VOLTage123\|456:HAR[:MINimum\|MAXimum]` | |
+| Mean value of voltage | `VOLTage[1..6\|460]:MEAN[:MINimum\|MAXimum\|IPOSitive\|INEGative\|INTegral]` | Average Mean Voltage |
 | Rectified Mean Voltage | `VOLTage[1..6\|460]:RMEAN[:MINimum\|MAXimum]` | Average Rectified Mean Voltage |
-| Rectified Mean Voltage, korrigert | `VOLTage[1..6\|460]:RMCORR[:MINimum\|MAXimum]` | Average Rectified Mean Voltage Corrected |
-| Peak-to-peak-spenning | `VOLTage[1..6]:PTP[:MINimum\|MAXimum]` | |
-| Høyeste verdi innen midlingsintervallet | `VOLTage[1..6]:PHIGH[:MINimum\|MAXimum]` | |
-| Laveste verdi innen midlingsintervallet | `VOLTage[1..6]:PLOW[:MINimum\|MAXimum]` | |
-| Spenningsharmonisk | `VOLTage[1..6\|460]:HAR[:MINimum\|MAXimum]` (orden velges med `CALCulate:HARMonic:ORDer`) | Average Voltage Harm |
-| Spenning, crestfaktor | `VOLTage[1..6]:CFACtor[:MINimum\|MAXimum]` | |
-| Spenning, absolutt fase | `VOLTage[1..6]:PHASe[:MINimum\|MAXimum]` (relativt til synkroniseringssignalet) | |
-| Spenning, formfaktor | `VOLTage[1..6]:FFACtor[:MINimum\|MAXimum]` | |
-| Spenning, harmonisk innhold | `VOLTage[1..6]:HCONTent[:MINimum\|MAXimum]` | |
-| Spenning, grunnharmonisk innhold | `VOLTage[1..6]:FCONTent[:MINimum\|MAXimum]` | |
-| Spennings-THD | `VOLTage[1..6]:THD[:MINimum\|MAXimum]` | |
+| Rectified Mean Voltage, corrected | `VOLTage[1..6\|460]:RMCORR[:MINimum\|MAXimum]` | Average Rectified Mean Voltage Corrected |
+| Peak-to-peak voltage | `VOLTage[1..6]:PTP[:MINimum\|MAXimum]` | |
+| Highest value within the averaging interval | `VOLTage[1..6]:PHIGH[:MINimum\|MAXimum]` | |
+| Lowest value within the averaging interval | `VOLTage[1..6]:PLOW[:MINimum\|MAXimum]` | |
+| Voltage harmonic | `VOLTage[1..6\|460]:HAR[:MINimum\|MAXimum]` (order selected with `CALCulate:HARMonic:ORDer`) | Average Voltage Harm |
+| Voltage, crest factor | `VOLTage[1..6]:CFACtor[:MINimum\|MAXimum]` | |
+| Voltage, absolute phase | `VOLTage[1..6]:PHASe[:MINimum\|MAXimum]` (relative to the synchronization signal) | |
+| Voltage, form factor | `VOLTage[1..6]:FFACtor[:MINimum\|MAXimum]` | |
+| Voltage, harmonic content | `VOLTage[1..6]:HCONTent[:MINimum\|MAXimum]` | |
+| Voltage, fundamental content | `VOLTage[1..6]:FCONTent[:MINimum\|MAXimum]` | |
+| Voltage THD | `VOLTage[1..6]:THD[:MINimum\|MAXimum]` | |
 | True RMS Current | `CURRent[1..6\|460][:DC][:MINimum\|MAXimum]` | Average Current trms |
-| RMS uten DC-komponent | `CURRent[1..6\|460]:AC[:MINimum\|MAXimum]` | Average Current rms |
-| Middelverdi av strøm | `CURRent[1..6\|460]:MEAN[:MINimum\|MAXimum\|IPOSitive\|INEGative\|INTegral]` | Average Mean Current |
+| RMS without DC component | `CURRent[1..6\|460]:AC[:MINimum\|MAXimum]` | Average Current rms |
+| Mean value of current | `CURRent[1..6\|460]:MEAN[:MINimum\|MAXimum\|IPOSitive\|INEGative\|INTegral]` | Average Mean Current |
 | Rectified Mean Current | `CURRent[1..6\|460]:RMEAN[:MINimum\|MAXimum]` | Average Rectified Mean Current |
-| Rectified Mean Current, korrigert | `CURRent[1..6\|460]:RMCORR[:MINimum\|MAXimum]` | Average Rectified Mean Current Corrected |
-| Peak-to-peak-strøm | `CURRent[1..6]:PTP[:MINimum\|MAXimum]` | |
-| Høyeste verdi innen midlingsintervallet | `CURRent[1..6]:PHIGH[:MINimum\|MAXimum]` | |
-| Laveste verdi innen midlingsintervallet | `CURRent[1..6]:PLOW[:MINimum\|MAXimum]` | |
-| Strømharmonisk | `CURRent[1..6\|460]:HAR[:MINimum\|MAXimum]` | Average Current Harm |
-| Strøm, crestfaktor | `CURRent[1..6]:CFACtor[:MINimum\|MAXimum]` | |
-| Strøm, absolutt fase | `CURRent[1..6]:PHASe[:MINimum\|MAXimum]` (relativt til synkroniseringssignalet) | |
-| Strøm, formfaktor | `CURRent[1..6]:FFACtor[:MINimum\|MAXimum]` | |
-| Strøm, harmonisk innhold | `CURRent[1..6]:HCONTent[:MINimum\|MAXimum]` | |
-| Strøm, grunnharmonisk innhold | `CURRent[1..6]:FCONTent[:MINimum\|MAXimum]` | |
-| Strøm-THD | `CURRent[1..6]:THD[:MINimum\|MAXimum]` | |
-| Aktiv effekt | `POWer[1..6\|460][:ACTive][:MINimum\|MAXimum\|IPOSitive\|INEGative\|INTegral]` | Total Active Power |
-| Tilsynelatende effekt | `POWer[1..6\|460]:APParent[:MINimum\|MAXimum\|IPOSitive\|INEGative\|INTegral]` | Total Apparent Power |
-| Reaktiv effekt | `POWer[1..6\|460]:REACtive[:MINimum\|MAXimum\|IPOSitive\|INEGative\|INTegral]` | Total Reactive Power |
-| Effektfaktor | `POWer[1..6\|460]:FACTor[:MINimum\|MAXimum]` | Total Power Factor |
-| Korrigert effekt | `POWer[1..6\|460]:CORRected[:MINimum\|MAXimum]` | Total Corrected Power |
-| Elektrisk virkningsgrad | `POWer[460]:EFFiciency[:MINimum\|MAXimum]` | Total Electrical Efficiency |
-| Fasevinkel mellom U og I (arccos[PF]) | `PHASe[1..6\|460][:MINimum\|MAXimum]` | Total Phase Angle (arccos[PF]) |
-| Tilsynelatende impedans | `IMPedance[1..6\|460][:APParent][:MINimum\|MAXimum]` | Total App. Impedance |
-| Seriell resistans | `RESistance[1..6\|460]:SERial[:MINimum\|MAXimum]` | Total Serial Resistance |
-| Parallell resistans | `RESistance[1..6\|460]:PARallel[:MINimum\|MAXimum]` | Total Parallel Resistance |
-| Seriell reaktans | `REACTance[1..6\|460]:SERial[:MINimum\|MAXimum]` | Total Serial Reactance |
-| Parallell reaktans | `REACTance[1..6\|460]:PARallel[:MINimum\|MAXimum]` | Total Parallel Reactance |
-| Aktiv effekt, harmonisk | `POWer[1..6\|460][:ACTive]:HAR[:MINimum\|MAXimum\|IPOSitive\|INEGative\|INTegral]` | Total Active Power Harm. |
-| Tilsynelatende effekt, harmonisk | `POWer[1..6\|460]:APParent:HAR[:MINimum\|MAXimum\|IPOSitive\|INEGative\|INTegral]` | Total Apparent Power Harm. |
-| Reaktiv effekt, harmonisk | `POWer[1..6\|460]:REACtive:HAR[:MINimum\|MAXimum\|IPOSitive\|INEGative\|INTegral]` | Total Reactive Power Harm. |
-| Effektfaktor, harmonisk | `POWer[1..6\|460]:FACTor:HAR[:MINimum\|MAXimum]` | Total Power Factor Harm. |
-| Elektrisk virkningsgrad, harmonisk | `POWer[460]:EFFiciency:HAR[:MINimum\|MAXimum]` | Total Electrical Efficiency Harm. |
-| Fasevinkel U til I, harmonisk (arccos[PF]) | `PHASe[1..6\|460]:HAR[:MINimum\|MAXimum]` | Total Phase Angle Har. (arccos[PF]) |
-| Tilsynelatende impedans, harmonisk | `IMPedance[1..6\|460][:APParent]:HAR[:MINimum\|MAXimum]` | Total App. Impedance Harmonic |
-| Seriell resistans, harmonisk | `RESistance[1..6\|460]:SERial:HAR[:MINimum\|MAXimum]` | Total Serial Resistance Harmonic |
-| Parallell resistans, harmonisk | `RESistance[1..6\|460]:PARallel:HAR[:MINimum\|MAXimum]` | Total Par. Resistance Harmonic |
-| Seriell reaktans, harmonisk | `REACTance[1..6\|460]:SERial:HAR[:MINimum\|MAXimum]` | Total Serial Reactance Harmonic |
-| Parallell reaktans, harmonisk | `REACTance[1..6\|460]:PARallel:HAR[:MINimum\|MAXimum]` | Total Par. Reactance Harmonic |
-| SYNC-frekvens | `FREQuency[:MINimum\|MAXimum]` | |
-| Midlingsintervallets lengde i sekunder | `TIME[:INTerval][:MINimum\|MAXimum]` | |
-| Tid [sek] siden timer-nullstilling | `TIME:RELative` | |
+| Rectified Mean Current, corrected | `CURRent[1..6\|460]:RMCORR[:MINimum\|MAXimum]` | Average Rectified Mean Current Corrected |
+| Peak-to-peak current | `CURRent[1..6]:PTP[:MINimum\|MAXimum]` | |
+| Highest value within the averaging interval | `CURRent[1..6]:PHIGH[:MINimum\|MAXimum]` | |
+| Lowest value within the averaging interval | `CURRent[1..6]:PLOW[:MINimum\|MAXimum]` | |
+| Current harmonic | `CURRent[1..6\|460]:HAR[:MINimum\|MAXimum]` | Average Current Harm |
+| Current, crest factor | `CURRent[1..6]:CFACtor[:MINimum\|MAXimum]` | |
+| Current, absolute phase | `CURRent[1..6]:PHASe[:MINimum\|MAXimum]` (relative to the synchronization signal) | |
+| Current, form factor | `CURRent[1..6]:FFACtor[:MINimum\|MAXimum]` | |
+| Current, harmonic content | `CURRent[1..6]:HCONTent[:MINimum\|MAXimum]` | |
+| Current, fundamental content | `CURRent[1..6]:FCONTent[:MINimum\|MAXimum]` | |
+| Current THD | `CURRent[1..6]:THD[:MINimum\|MAXimum]` | |
+| Active power | `POWer[1..6\|460][:ACTive][:MINimum\|MAXimum\|IPOSitive\|INEGative\|INTegral]` | Total Active Power |
+| Apparent power | `POWer[1..6\|460]:APParent[:MINimum\|MAXimum\|IPOSitive\|INEGative\|INTegral]` | Total Apparent Power |
+| Reactive power | `POWer[1..6\|460]:REACtive[:MINimum\|MAXimum\|IPOSitive\|INEGative\|INTegral]` | Total Reactive Power |
+| Power factor | `POWer[1..6\|460]:FACTor[:MINimum\|MAXimum]` | Total Power Factor |
+| Corrected power | `POWer[1..6\|460]:CORRected[:MINimum\|MAXimum]` | Total Corrected Power |
+| Electrical efficiency | `POWer[460]:EFFiciency[:MINimum\|MAXimum]` | Total Electrical Efficiency |
+| Phase angle between U and I (arccos[PF]) | `PHASe[1..6\|460][:MINimum\|MAXimum]` | Total Phase Angle (arccos[PF]) |
+| Apparent impedance | `IMPedance[1..6\|460][:APParent][:MINimum\|MAXimum]` | Total App. Impedance |
+| Series resistance | `RESistance[1..6\|460]:SERial[:MINimum\|MAXimum]` | Total Serial Resistance |
+| Parallel resistance | `RESistance[1..6\|460]:PARallel[:MINimum\|MAXimum]` | Total Parallel Resistance |
+| Series reactance | `REACTance[1..6\|460]:SERial[:MINimum\|MAXimum]` | Total Serial Reactance |
+| Parallel reactance | `REACTance[1..6\|460]:PARallel[:MINimum\|MAXimum]` | Total Parallel Reactance |
+| Active power, harmonic | `POWer[1..6\|460][:ACTive]:HAR[:MINimum\|MAXimum\|IPOSitive\|INEGative\|INTegral]` | Total Active Power Harm. |
+| Apparent power, harmonic | `POWer[1..6\|460]:APParent:HAR[:MINimum\|MAXimum\|IPOSitive\|INEGative\|INTegral]` | Total Apparent Power Harm. |
+| Reactive power, harmonic | `POWer[1..6\|460]:REACtive:HAR[:MINimum\|MAXimum\|IPOSitive\|INEGative\|INTegral]` | Total Reactive Power Harm. |
+| Power factor, harmonic | `POWer[1..6\|460]:FACTor:HAR[:MINimum\|MAXimum]` | Total Power Factor Harm. |
+| Electrical efficiency, harmonic | `POWer[460]:EFFiciency:HAR[:MINimum\|MAXimum]` | Total Electrical Efficiency Harm. |
+| Phase angle U to I, harmonic (arccos[PF]) | `PHASe[1..6\|460]:HAR[:MINimum\|MAXimum]` | Total Phase Angle Har. (arccos[PF]) |
+| Apparent impedance, harmonic | `IMPedance[1..6\|460][:APParent]:HAR[:MINimum\|MAXimum]` | Total App. Impedance Harmonic |
+| Series resistance, harmonic | `RESistance[1..6\|460]:SERial:HAR[:MINimum\|MAXimum]` | Total Serial Resistance Harmonic |
+| Parallel resistance, harmonic | `RESistance[1..6\|460]:PARallel:HAR[:MINimum\|MAXimum]` | Total Par. Resistance Harmonic |
+| Series reactance, harmonic | `REACTance[1..6\|460]:SERial:HAR[:MINimum\|MAXimum]` | Total Serial Reactance Harmonic |
+| Parallel reactance, harmonic | `REACTance[1..6\|460]:PARallel:HAR[:MINimum\|MAXimum]` | Total Par. Reactance Harmonic |
+| SYNC frequency | `FREQuency[:MINimum\|MAXimum]` | |
+| Length of the averaging interval in seconds | `TIME[:INTerval][:MINimum\|MAXimum]` | |
+| Time [s] since the timer was reset | `TIME:RELative` | |
 
-#### Tilleggsfunksjoner tilgjengelig med prosessgrensesnitt PI1 installert
+#### Additional functions available with process interface PI1 installed
 
-| Funksjon (størrelse) | Kommando | Uten suffiks |
+| Function (quantity) | Command | No suffix |
 |---|---|---|
-| Akselmoment (Shaft torque) | `TORQue[1..4][:MINimum\|MAXimum]` | `TORQue1` |
-| Rotasjonshastighet | `SPEed[1..4][:MINimum\|MAXimum]` | `SPEed1` |
-| Mekanisk effekt | `POWer[1..4]:MECHanical[:MINimum\|MAXimum]` | `POWer1:MECHanical` |
-| Slip (sakking) | `SLIP[1..4][:MINimum\|MAXimum]` | `SLIP1` |
-| Mekanisk virkningsgrad | `EFFiciency[1..4][:MINimum\|MAXimum]` | `EFFiciency1` |
-| Rå inngangsverdi | `GPINput[1..8][:MINimum\|MAXimum]` | `GPINput1` |
+| Shaft torque | `TORQue[1..4][:MINimum\|MAXimum]` | `TORQue1` |
+| Rotational speed | `SPEed[1..4][:MINimum\|MAXimum]` | `SPEed1` |
+| Mechanical power | `POWer[1..4]:MECHanical[:MINimum\|MAXimum]` | `POWer1:MECHanical` |
+| Slip | `SLIP[1..4][:MINimum\|MAXimum]` | `SLIP1` |
+| Mechanical efficiency | `EFFiciency[1..4][:MINimum\|MAXimum]` | `EFFiciency1` |
+| Raw input value | `GPINput[1..8][:MINimum\|MAXimum]` | `GPINput1` |
 
-## Subsystemer: ABORt til ROUTe
+## Subsystems: ABORt through ROUTe
 
-Dette kapittelet dokumenterer subsystemene ABORt, CALCulate, DISPlay, FORMat, HARDcopy (HCOPy), INITiate, INPut, OUTPut og ROUTe. SCPI-kortformen vises med store bokstaver i kommandonavnet (f.eks. `CALCulate` = kortform `CALC`).
+This chapter documents the ABORt, CALCulate, DISPlay, FORMat, HARDcopy (HCOPy), INITiate, INPut, OUTPut and ROUTe subsystems. The SCPI short form is shown in upper case in the command name (e.g. `CALCulate` = short form `CALC`).
 
-### ABORt-subsystemet
+### The ABORt subsystem
 
-ABORt-subsystemet inneholder kommandoene for å avbryte handlinger som er trigget. Etter at en handling er avbrutt, kan den umiddelbart trigges på nytt. Alle kommandoene utløser en hendelse (event) og har ingen *RST-verdi.
+The ABORt subsystem contains the commands for aborting triggered actions. Once an action has been aborted, it can be triggered again immediately. All the commands are events and have no *RST value.
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
-| `:ABORt` | – | – | Ingen query |
+| `:ABORt` | – | – | No query |
 
 #### `ABORt`
 
-Nullstiller trigger-/synkroniseringssystemet. Når målingen eller datalagringen er startet etter at trigger-/synkbetingelsen er oppfylt, har denne kommandoen ingen effekt. Kommandoen tar instrumentet fra tilstanden «venter på trigger/synk» tilbake til tilstanden før `INITiate[:IMMediate]:SEQuence`-kommandoen ble sendt.
+Resets the trigger/synchronization system. Once the measurement or data storage has started after the trigger/sync condition has been met, this command has no effect. The command takes the instrument from the "waiting for trigger/sync" state back to the state it was in before the `INITiate[:IMMediate]:SEQuence` command was sent.
 
-- **Parametre:** ingen
-- **Respons:** ingen query
-- **\*RST-tilstand:** –
-- **Invaliderer / invalideres av:** –
+- **Parameters:** none
+- **Response:** no query
+- **\*RST state:** –
+- **Invalidates / invalidated by:** –
 
-Eksempel:
+Example:
 
 ```
 ABOR
 ```
 
-### CALCulate-subsystemet
+### The CALCulate subsystem
 
-CALCulate-subsystemet inneholder kommandoer for spektrumberegning, brukerdefinert beregning av elektrisk virkningsgrad og integrasjon av de midlede verdiene.
+The CALCulate subsystem contains commands for spectrum computation, user-defined computation of electrical efficiency and integration of the averaged values.
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
-| `:CALCulate:TRANsform:FREQuency[:STATe]` | `ONCE` | – | Ingen query |
+| `:CALCulate:TRANsform:FREQuency[:STATe]` | `ONCE` | – | No query |
 | `:CALCulate:TRANsform:FREQuency:MODE` | `FFT \| DFT \| STD` | `FFT` | |
 | `:CALCulate:TRANsform:FREQuency:FUNCtion` | `<function list>` | – | |
-| `:CALCulate:TRANsform:FREQuency:STARt` | `0` | – | Kun for FFT og DFT |
-| `:CALCulate:TRANsform:FREQuency:STOP` | `<value>` | – | Kun for FFT og DFT |
-| `:CALCulate:TRANsform:FREQuency:CYCLes` | `4 \| 6 \| 8 \| 10 \| 12` | `10` | Kun for STD |
-| `:CALCulate:TRANsform:FREQuency:GROuping` | `COMPonent \| HARMonic \| HGRoup \| HSGRoup \| ISGRoup \| SGRoup` | – | Kun for STD |
-| `:CALCulate:DATA?` | `[<count>,[<offset>]]` | – | Kun query |
-| `:CALCulate:DATA:PREamble?` | – | – | Kun query |
-| `:CALCulate:DATA:THD?` | – | – | Kun query |
+| `:CALCulate:TRANsform:FREQuency:STARt` | `0` | – | FFT and DFT only |
+| `:CALCulate:TRANsform:FREQuency:STOP` | `<value>` | – | FFT and DFT only |
+| `:CALCulate:TRANsform:FREQuency:CYCLes` | `4 \| 6 \| 8 \| 10 \| 12` | `10` | STD only |
+| `:CALCulate:TRANsform:FREQuency:GROuping` | `COMPonent \| HARMonic \| HGRoup \| HSGRoup \| ISGRoup \| SGRoup` | – | STD only |
+| `:CALCulate:DATA?` | `[<count>,[<offset>]]` | – | Query only |
+| `:CALCulate:DATA:PREamble?` | – | – | Query only |
+| `:CALCulate:DATA:THD?` | – | – | Query only |
 | `:CALCulate:INTegral[:STATe]` | `ON \| OFF` | `OFF` | |
 | `:CALCulate:INTegral:FUNCtion` | `<function list>` | – | |
 | `:CALCulate:INTegral:CLEar[:IMMediate]` | – | – | |
@@ -993,13 +993,13 @@ CALCulate-subsystemet inneholder kommandoer for spektrumberegning, brukerdefiner
 
 #### `CALCulate:TRANsform:FREQuency[:STATe] ONCE`
 
-Starter en enkelt beregning av frekvenstransformen (spektrum), dvs. instrumentet beregner spektrum kun ved mottak av denne kommandoen. Et forsøk på å utføre spektrumberegning mens `SENSe:SWEep1[:STATe]` er `ON` (minnelagring av samples) genererer feilen «-221, Settings conflict».
+Starts a single computation of the frequency transform (spectrum), i.e. the instrument computes the spectrum only on receipt of this command. Attempting to perform a spectrum computation while `SENSe:SWEep1[:STATe]` is `ON` (memory storage of samples) generates the error "-221, Settings conflict".
 
-- **Parametre:** `ONCE`
-- **\*RST-tilstand:** –
-- **Invaliderer / invalideres av:** –
+- **Parameters:** `ONCE`
+- **\*RST state:** –
+- **Invalidates / invalidated by:** –
 
-Eksempel:
+Example:
 
 ```
 CALC:TRAN:FREQ ONCE
@@ -1007,193 +1007,193 @@ CALC:TRAN:FREQ ONCE
 
 #### `CALCulate:TRANsform:FREQuency:MODE FFT | DFT | STD`
 
-Velger beregningsmetode for harmoniske.
+Selects the computation method for harmonics.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `FFT` | Beregner et FFT-amplitudespektrum. Antall linjer bestemmes av instrumentet og avhenger av stoppfrekvensen, innstillingen for anti-alias-filteret og instrumentmodellen. |
-| `DFT` | Beregner et DFT-amplitudespektrum, dvs. frekvensen og amplituden til grunnharmonisk og dens heltallsmultipler fra FFT-spekteret. Antall linjer (harmoniske) avhenger av valgt frekvensområde og grunnfrekvensen (maks. 41 inkludert DC-komponent). |
-| `STD` | Beregner harmoniske i henhold til standarden EN61000-4-7 Ed 2.1. Instrumentet må være synkronisert på grunnfrekvensen. |
+| `FFT` | Computes an FFT amplitude spectrum. The number of lines is determined by the instrument and depends on the stop frequency, the anti-alias filter setting and the instrument model. |
+| `DFT` | Computes a DFT amplitude spectrum, i.e. the frequency and amplitude of the fundamental and its integer multiples from the FFT spectrum. The number of lines (harmonics) depends on the selected frequency range and the fundamental frequency (max. 41 including the DC component). |
+| `STD` | Computes harmonics according to the EN61000-4-7 Ed 2.1 standard. The instrument must be synchronized to the fundamental frequency. |
 
-- **\*RST-tilstand:** `FFT`
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** `FFT`
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 CALC:TRAN:FREQ:MODE FFT
-CALC:TRAN:FREQ:MODE?    Respons: FFT
+CALC:TRAN:FREQ:MODE?    Response: FFT
 ```
 
 #### `CALCulate:TRANsform:FREQuency:FUNCtion <function>{,<function>}`
 
-Velger funksjonen(e) `<function>` som instrumentet skal bruke i spektrumberegningen. `<function>` angis som en streng i anførselstegn, for eksempel: `"VOLTage1"`. En kommaseparert liste av `<sensor_function>` kan sendes som parametre. Når en ny liste sendes, invalideres den tidligere aktive listen (hvis noen).
+Selects the function(s) `<function>` the instrument is to use in the spectrum computation. `<function>` is given as a quoted string, for example: `"VOLTage1"`. A comma-separated list of `<sensor_function>` can be passed as parameters. When a new list is sent, the previously active list (if any) is invalidated.
 
-Query-responsen returnerer en kommaseparert liste av funksjoner, der hver funksjon er `<STRING RESPONSE DATA>`, dvs. omsluttet av anførselstegn. Queryen returnerer kortform-mnemonikkene og utelater eventuelle standardnoder (default nodes) i `<function>`.
+The query response returns a comma-separated list of functions, where each function is `<STRING RESPONSE DATA>`, i.e. enclosed in quotation marks. The query returns the short-form mnemonics and omits any default nodes in `<function>`.
 
-Denne funksjonslisten lagres ikke med `*SAV` og tømmes med `*RST`.
+This function list is not stored with `*SAV` and is cleared by `*RST`.
 
-- **\*RST-tilstand:** tom liste = ingen verdier definert
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** empty list = no values defined
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 CALC:TRAN:FREQ:FUNC "VOLT1","CURR1","POW1"
-CALC:TRAN:FREQ:FUNC?    Respons: "VOLT1","CURR1","POW1"
+CALC:TRAN:FREQ:FUNC?    Response: "VOLT1","CURR1","POW1"
 ```
 
 #### `CALCulate:TRANsform:FREQuency:STARt <frequency>`
 
-Angir startfrekvensen for beregningen av harmoniske, i hertz. Kommandoen aksepterer kun 0 og returnerer alltid 0. Kommandoen er implementert av kompatibilitetshensyn.
+Sets the start frequency for the computation of harmonics, in hertz. The command accepts only 0 and always returns 0. The command is implemented for compatibility reasons.
 
-- **Parametre:** `<frequency>`
-- **\*RST-tilstand:** 0.0 Hz
-- **Invaliderer / invalideres av:** –
+- **Parameters:** `<frequency>`
+- **\*RST state:** 0.0 Hz
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 CALC:TRAN:FREQ:STAR 0.0
-CALC:TRAN:FREQ:STAR?    Respons: 0.0
+CALC:TRAN:FREQ:STAR?    Response: 0.0
 ```
 
 #### `CALCulate:TRANsform:FREQuency:STOP <frequency>`
 
-Angir øvre frekvens for beregningen av harmoniske (frekvensen til den ytterste FFT- eller DFT-spektrumlinjen).
+Sets the upper frequency for the computation of harmonics (the frequency of the outermost FFT or DFT spectrum line).
 
-- **Parametre:** `<frequency>`
+- **Parameters:** `<frequency>`
   - Minimum: 10 Hz
-  - Maksimum: samplerate / 2
-  - Sampleraten kan hentes med `[:SENSe]:SWEep:FREQuency?`.
-  - Instrumentet avrunder (coercer) den angitte verdien til nærmeste høyere eksakte frekvens.
-- **\*RST-tilstand:** høyest mulige verdi (avhengig av instrumentet)
-- **Invaliderer / invalideres av:** –
+  - Maximum: sample rate / 2
+  - The sample rate can be read with `[:SENSe]:SWEep:FREQuency?`.
+  - The instrument coerces the value given to the nearest higher exact frequency.
+- **\*RST state:** highest possible value (instrument dependent)
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 CALC:TRAN:FREQ:STOP 625.0
-CALC:TRAN:FREQ:STOP?    Respons: 625.0
+CALC:TRAN:FREQ:STOP?    Response: 625.0
 ```
 
 #### `CALCulate:TRANsform:FREQuency:CYCLes 4 | 6 | 8 | 10 | 12`
 
-Definerer lengden på analyseintervallet. Innstillingen gjelder kun i STD-modus.
+Defines the length of the analysis interval. The setting applies in STD mode only.
 
-- **Parametre:** `<cycles>` – velger antall grunnharmoniske perioder (cycles) for analyseintervallet (begrenset liste). Standardverdiene er 10 for 50 Hz og 12 for 60 Hz nominell frekvens (tilsvarer en intervallengde på 200 ms ved fnom).
-- **\*RST-tilstand:** `10`
-- **Invaliderer / invalideres av:** –
+- **Parameters:** `<cycles>` – selects the number of fundamental cycles for the analysis interval (restricted list). The default values are 10 for 50 Hz and 12 for 60 Hz nominal frequency (corresponding to an interval length of 200 ms at fnom).
+- **\*RST state:** `10`
+- **Invalidates / invalidated by:** –
 
 #### `CALCulate:TRANsform:FREQuency:GROuping COMPonent | HARMonic | HGRoup | HSGRoup | ISGRoup | SGRoup`
 
-Setter grupperingsmodus for etterbehandling av harmonisk analyse. Modusen kan endres selv etter en trigget analyse (`CALC:TRAN:FREQ ONCE`) for å lese dataene fra samme intervall på nytt med en annen grupperingsmodus. Innstillingen gjelder kun i STD-modus.
+Sets the grouping mode for post-processing of the harmonic analysis. The mode can be changed even after a triggered analysis (`CALC:TRAN:FREQ ONCE`) in order to re-read the data from the same interval with a different grouping mode. The setting applies in STD mode only.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `COMPonent` | Ingen gruppering, kun spektralkomponentene fra basis-FFT leveres (Y C,k) |
-| `HARMonic` | De harmoniske komponentene beregnes (Y H,h) |
-| `HGRoup` | De harmoniske gruppene beregnes (Y g,h) |
-| `HSGRoup` | De harmoniske subgruppene beregnes (Y sg,h) |
-| `ISGRoup` | De interharmoniske subgruppene beregnes (Y isg,h) |
-| `SGRoup` | Både harmoniske og interharmoniske subgrupper beregnes (Ysg,h, Yisg,h) |
+| `COMPonent` | No grouping, only the spectral components from the base FFT are delivered (Y C,k) |
+| `HARMonic` | The harmonic components are computed (Y H,h) |
+| `HGRoup` | The harmonic groups are computed (Y g,h) |
+| `HSGRoup` | The harmonic subgroups are computed (Y sg,h) |
+| `ISGRoup` | The interharmonic subgroups are computed (Y isg,h) |
+| `SGRoup` | Both harmonic and interharmonic subgroups are computed (Ysg,h, Yisg,h) |
 
-- **\*RST-tilstand:** `COMPonent`
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** `COMPonent`
+- **Invalidates / invalidated by:** –
 
 #### `CALCulate:DATA? [<count>[,<offset>]]`
 
-Returnerer spektrumdata i formatet definert av FORMat-kommandoene. Når kommandoen sendes uten argumenter, returneres alle data i henhold til preamble-informasjonen. Første returnerte spektrumlinje tilsvarer DC-komponenten i signalet.
+Returns spectrum data in the format defined by the FORMat commands. When the command is sent without arguments, all data is returned in accordance with the preamble information. The first spectrum line returned corresponds to the DC component of the signal.
 
-Hvis en harmonisk ikke kunne beregnes på grunn av brudd på sampleteoremet for en frekvens i DFT-modus, returneres NaN for denne harmoniske.
+If a harmonic could not be computed because the sampling theorem was violated for a frequency in DFT mode, NaN is returned for that harmonic.
 
-Hvis en måling av harmoniske ennå ikke er utført, eller hvis denne queryen sendes mens en måling av harmoniske pågår (bit 12 i `STATus:OPERation` er satt), genereres feilen «-230, Data corrupt or stale» og ingen data returneres.
+If a harmonics measurement has not yet been performed, or if this query is sent while a harmonics measurement is in progress (bit 12 in `STATus:OPERation` is set), the error "-230, Data corrupt or stale" is generated and no data is returned.
 
-- **Parametre (valgfrie):**
-  - `<count>` – angir antall linjer/harmoniske som skal returneres per funksjon.
-  - `<offset>` – hvis ikke angitt, returneres spektrumdata fra og med linje/harmonisk 0 (DC-komponenten). Ellers har første returnerte linje indeksen gitt av `<offset>`.
-  - Hvis `<offset>` + `<count>` overstiger antall tilgjengelige linjer, genereres feilen «-222, Data out of range». Bruk `CALCulate:DATA:PREamble?` for å finne det faktiske antallet tilgjengelige harmoniske/linjer.
-- **Respons:**
-  - Når `FORMat:TRANspose` er `ON`, grupperes punktene per funksjon:
+- **Parameters (optional):**
+  - `<count>` – states the number of lines/harmonics to be returned per function.
+  - `<offset>` – if not given, spectrum data is returned starting from line/harmonic 0 (the DC component). Otherwise the first line returned has the index given by `<offset>`.
+  - If `<offset>` + `<count>` exceeds the number of available lines, the error "-222, Data out of range" is generated. Use `CALCulate:DATA:PREamble?` to find the actual number of available harmonics/lines.
+- **Response:**
+  - When `FORMat:TRANspose` is `ON`, the points are grouped per function:
     `<line1>,<line2>,<line3>,... (func1) ... <line1>,<line2>,<line3>,... (func2)`
-  - Når `FORMat:TRANspose` er `OFF`, grupperes punktene per linje:
+  - When `FORMat:TRANspose` is `OFF`, the points are grouped per line:
     `<func1>,<func2>,<func3>,... (line1) ... <func1>,<func2>,<func3>,... (line2)`
-- **\*RST-tilstand:** ingen respons på denne kommandoen etter reset.
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** no response to this command after reset.
+- **Invalidates / invalidated by:** –
 
-Eksempel:
+Example:
 
 ```
-CALC:DATA?    Respons: 221.56,0.056,15.456,0.075,5.24,0.034...
+CALC:DATA?    Response: 221.56,0.056,15.456,0.075,5.24,0.034...
 ```
 
 #### `CALCulate:DATA:PREamble?`
 
-Leser preamble (innledningsdata) for spektrumdataene. Preamble-informasjonen er kun gyldig for spektrumdata fra den samme enkeltberegningen av spektrum som ble startet med `CALCulate:TRANsform:FREQuency[:STATe] ONCE`.
+Reads the preamble for the spectrum data. The preamble information is valid only for spectrum data from the same single spectrum computation that was started with `CALCulate:TRANsform:FREQuency[:STATe] ONCE`.
 
-Hvis denne queryen sendes mens en måling av harmoniske pågår (bit 12 i `STATus:OPERation` er satt), genereres feilen «-230, Data corrupt or stale» og ingen preamble-data returneres.
+If this query is sent while a harmonics measurement is in progress (bit 12 in `STATus:OPERation` is set), the error "-230, Data corrupt or stale" is generated and no preamble data is returned.
 
-- **Respons:** `<start_time>,<line_count>,<function_count>,<freq>[,<freq>,...]`
-  - `<start_time>` – angir tidsintervallet mellom `TIMer:RESet:TIME?` og første punkt i de samplede dataene som ble brukt i den siste spektrumberegningen. Hvis en måling av harmoniske ennå ikke er utført, returneres ASCII-ekvivalenten av NaN (+9.91E+37) for dette elementet.
-  - `<line_count>` – angir antall spektrumlinjer beregnet per funksjon.
-  - `<function_count>` – angir antall funksjoner i spektrumfunksjonslisten.
-  - `<freq>[,<freq>,...]` – en liste med frekvenssteg (FFT), grunnfrekvens (DFT) eller synkroniseringsfrekvens (STD) for hver funksjon i spektrumlisten. Første frekvens tilsvarer første funksjon i funksjonslisten, andre frekvens tilsvarer andre funksjon, osv. For FFT (frekvenssteg) og STD (synkroniseringsfrekvens) er `<freq>`-verdiene identiske for alle funksjoner; for DFT kan hver funksjon ha en individuell grunnfrekvens. Hvis ingen grunnfrekvens kan finnes (DFT), eller synkroniseringsfrekvensen ikke er gyldig eller utenfor området (STD), returneres en ASCII-ekvivalent av NaN (+9.91E37).
-- **Invaliderer / invalideres av:** –
+- **Response:** `<start_time>,<line_count>,<function_count>,<freq>[,<freq>,...]`
+  - `<start_time>` – states the time interval between `TIMer:RESet:TIME?` and the first point of the sampled data used in the last spectrum computation. If a harmonics measurement has not yet been performed, the ASCII equivalent of NaN (+9.91E+37) is returned for this element.
+  - `<line_count>` – states the number of spectrum lines computed per function.
+  - `<function_count>` – states the number of functions in the spectrum function list.
+  - `<freq>[,<freq>,...]` – a list of frequency steps (FFT), fundamental frequency (DFT) or synchronization frequency (STD) for each function in the spectrum list. The first frequency corresponds to the first function in the function list, the second frequency to the second function, and so on. For FFT (frequency step) and STD (synchronization frequency) the `<freq>` values are identical for all functions; for DFT each function may have an individual fundamental frequency. If no fundamental frequency can be found (DFT), or the synchronization frequency is invalid or out of range (STD), an ASCII equivalent of NaN (+9.91E37) is returned.
+- **Invalidates / invalidated by:** –
 
-Eksempel:
+Example:
 
 ```
-CALC:DATA:PRE?    Respons: 11.32, 40, 3, 50.0,50.0,50.0
+CALC:DATA:PRE?    Response: 11.32, 40, 3, 50.0,50.0,50.0
 ```
 
 #### `CALCulate:DATA:THD?`
 
-Leser THD-verdiene i henhold til valgt gruppering i STD-modus. Verdiene er kun gyldige i STD-modus (unntatt med `COMPonent`-gruppering).
+Reads the THD values according to the grouping selected in STD mode. The values are valid only in STD mode (except with `COMPonent` grouping).
 
-- **Respons:** `<THD>[,<THD>,...]` – en liste med THD-verdier for hver funksjon i spektrumlisten, oppgitt som relativ % av grunnharmonisk. NaN-verdier returneres i følgende tilfeller:
-  - modusinnstillingen er FFT, DFT eller STD med `COMPonent`-gruppering
-  - grunnharmonisk for en funksjon er mindre enn 5 % av måleområdet
-  - synkroniseringen er ikke låst, eller er utenfor analyseområdet for harmoniske
-- **Invaliderer / invalideres av:** –
+- **Response:** `<THD>[,<THD>,...]` – a list of THD values for each function in the spectrum list, given as a relative % of the fundamental. NaN values are returned in the following cases:
+  - the mode setting is FFT, DFT, or STD with `COMPonent` grouping
+  - the fundamental of a function is less than 5 % of the measuring range
+  - synchronization is not locked, or is outside the analysis range for harmonics
+- **Invalidates / invalidated by:** –
 
-Eksempel:
+Example:
 
 ```
-CALC:DATA:THD?    Respons: +2.36780E+00,+5.12943E+00,+9.91000E+37
+CALC:DATA:THD?    Response: +2.36780E+00,+5.12943E+00,+9.91000E+37
 ```
 
 #### `CALCulate:INTegral[:STATe] ON | OFF`
 
-Styrer tilstanden til instrumentets integrasjonsfunksjonalitet. Når den er aktivert, kan instrumentet integrere over enkelte midlede målefunksjoner.
+Controls the state of the instrument's integration functionality. When enabled, the instrument can integrate over individual averaged measurement functions.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `ON` | Integrasjon aktivert. |
-| `OFF` | Integrasjon deaktivert. |
+| `ON` | Integration enabled. |
+| `OFF` | Integration disabled. |
 
-- **\*RST-tilstand:** `OFF`
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** `OFF`
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 CALC:INT ON
-CALC:INT?    Respons: ON
+CALC:INT?    Response: ON
 ```
 
 #### `CALCulate:INTegral:FUNCtion <function>{,<function>}`
 
-Angir funksjonslisten for integralberegning. `<function>` angis som en streng i anførselstegn, for eksempel: `"POWer1"`. En kommaseparert liste av `<function>` kan sendes som parametre. Når en ny liste sendes, invalideres den tidligere aktive listen (hvis noen).
+Sets the function list for integral computation. `<function>` is given as a quoted string, for example: `"POWer1"`. A comma-separated list of `<function>` can be passed as parameters. When a new list is sent, the previously active list (if any) is invalidated.
 
-Query-responsen returnerer en kommaseparert liste av funksjoner, der hver funksjon er `<STRING RESPONSE DATA>`, dvs. omsluttet av anførselstegn. Queryen returnerer kortform-mnemonikkene og utelater eventuelle standardnoder i `<function>`.
+The query response returns a comma-separated list of functions, where each function is `<STRING RESPONSE DATA>`, i.e. enclosed in quotation marks. The query returns the short-form mnemonics and omits any default nodes in `<function>`.
 
-Midlede POWer- og VOLTage/CURRent:MEAN-verdier kan integreres. Spesifikatorene `INTegral | PINTegral | NINTegral` kan da brukes i `SENSe:FUNCtion`- / `SENSe:DATA?`-listen for å lese de integrerte verdiene. Hvis integrasjonsfunksjonslisten endres eller integrasjon slås `OFF`, returnerer verdiene som tilsvarer de fjernede funksjonene NaN som respons på `SENSe:DATA?`.
+Averaged POWer and VOLTage/CURRent:MEAN values can be integrated. The specifiers `INTegral | PINTegral | NINTegral` can then be used in the `SENSe:FUNCtion` / `SENSe:DATA?` list to read the integrated values. If the integration function list is changed or integration is switched `OFF`, the values corresponding to the removed functions return NaN in response to `SENSe:DATA?`.
 
-`SENSe:FUNCtion` genererer feilen «-221, Settings conflict» hvis det gjøres forsøk på å sette en `SENSe:FUNCtion`-liste som inneholder en integrert funksjon som ikke er del av integrasjonsfunksjonslisten, eller mens INTegral-beregning er `OFF`. Maksimalt antall integrerte funksjoner er 6.
+`SENSe:FUNCtion` generates the error "-221, Settings conflict" if an attempt is made to set a `SENSe:FUNCtion` list containing an integrated function that is not part of the integration function list, or while INTegral computation is `OFF`. The maximum number of integrated functions is 6.
 
-`*RCL` og `*RST` nullstiller alle integrerte verdier.
+`*RCL` and `*RST` clear all integrated values.
 
-- **Parametre:** `<function>` – angir den integrerte funksjonen. Liste over gyldige funksjoner:
+- **Parameters:** `<function>` – states the integrated function. List of valid functions:
 
 ```
 VOLTage1..6:MEAN
@@ -1206,9 +1206,9 @@ POWer[1..6|460]:APParent:HAR
 POWer[1..6|460]:REACtive:HAR
 ```
 
-- **\*RST-tilstand:** avhenger av antall installerte faser:
+- **\*RST state:** depends on the number of installed phases:
 
-| Antall installerte faser | Funksjonsliste |
+| Number of installed phases | Function list |
 |---|---|
 | 1 | `"POW1"` |
 | 2 | `"POW1","POW2"` |
@@ -1217,24 +1217,24 @@ POWer[1..6|460]:REACtive:HAR
 | 5 | `"POW1","POW2","POW3","POW","POW4","POW5"` |
 | 6 | `"POW1","POW2","POW3","POW","POW460"` |
 
-- **Invaliderer / invalideres av:** –
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 CALC:INT:FUNC "POW1:ACT"
-CALC:INT:FUNC?    Respons: "POW1"
+CALC:INT:FUNC?    Response: "POW1"
 ```
 
 #### `CALCulate:INTegral:CLEar[:IMMediate]`
 
-Setter verdiene til alle de integrerte funksjonene til null. Alle verdier nullstilles samtidig.
+Sets the values of all the integrated functions to zero. All values are cleared at the same time.
 
-- **Parametre:** –
-- **\*RST-tilstand:** –
-- **Invaliderer / invalideres av:** –
+- **Parameters:** –
+- **\*RST state:** –
+- **Invalidates / invalidated by:** –
 
-Eksempel:
+Example:
 
 ```
 CALC:INT:CLE
@@ -1242,54 +1242,54 @@ CALC:INT:CLE
 
 #### `CALCulate:INTegral:CLEar:AUTO ON | OFF`
 
-Styrer automatisk nullstilling av de integrerte funksjonene.
+Controls automatic clearing of the integrated functions.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `ON` | Integrerte verdier nullstilles ved start av integrasjonen. Alle verdier settes til null ved integrasjonsstart. |
-| `OFF` | Automatisk nullstilling av integrerte verdier er deaktivert. |
+| `ON` | Integrated values are cleared when integration starts. All values are set to zero at integration start. |
+| `OFF` | Automatic clearing of integrated values is disabled. |
 
-- **\*RST-tilstand:** `ON`
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** `ON`
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 CALC:INT:CLE:AUTO ON
-CALC:INT:CLE:AUTO?    Respons: ON
+CALC:INT:CLE:AUTO?    Response: ON
 ```
 
 #### `CALCulate:INTegral:STARt:SOURce CMD | TIME | MAN`
 
-Angir startbetingelsen for integrasjon.
+Sets the start condition for integration.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `CMD` | Integrasjonen starter ved mottak av kommandoen `CALCulate:INTegral:STARt[:IMMediate]`. |
-| `TIME` | Integrasjonen starter på et tidspunkt angitt med kommandoen `CALCulate:INTegral:STARt:TIME`. |
-| `MAN` | Integrasjonen starter når brukeren trykker F1-tasten på frontpanelet fra integrasjonsmåleskjermen på instrumentet. |
+| `CMD` | Integration starts on receipt of the command `CALCulate:INTegral:STARt[:IMMediate]`. |
+| `TIME` | Integration starts at a time given with the command `CALCulate:INTegral:STARt:TIME`. |
+| `MAN` | Integration starts when the user presses the F1 key on the front panel from the integration measurement screen on the instrument. |
 
-- **\*RST-tilstand:** `CMD`
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** `CMD`
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 CALC:INT:STAR:SOUR CMD
-CALC:INT:STAR:SOUR?    Respons: CMD
+CALC:INT:STAR:SOUR?    Response: CMD
 ```
 
 #### `CALCulate:INTegral:STARt[:IMMediate]`
 
-Starter integrasjonen umiddelbart. Kommandoen setter også de integrerte verdiene til null hvis `CALCulate:INTegral:CLEar:AUTO` er satt til `ON`.
+Starts integration immediately. The command also sets the integrated values to zero if `CALCulate:INTegral:CLEar:AUTO` is set to `ON`.
 
-Forsøk på å starte integrasjon med denne kommandoen når `CALCulate:INTegral:STARt:SOURce` ikke er satt til `CMD`, genererer feilen «-221, Settings conflict».
+Attempting to start integration with this command when `CALCulate:INTegral:STARt:SOURce` is not set to `CMD` generates the error "-221, Settings conflict".
 
-- **Parametre:** –
-- **\*RST-tilstand:** –
-- **Invaliderer / invalideres av:** –
+- **Parameters:** –
+- **\*RST state:** –
+- **Invalidates / invalidated by:** –
 
-Eksempel:
+Example:
 
 ```
 CALC:INT:STAR
@@ -1297,59 +1297,59 @@ CALC:INT:STAR
 
 #### `CALCulate:INTegral:STARt:TIME <yyyy,MM,dd,hh,mm,ss>`
 
-Angir starttidspunkt for integrasjonen. Integrasjonen starter når instrumentets interne dato/klokkeslett er lik tiden angitt med denne kommandoen.
+Sets the start time for integration. Integration starts when the instrument's internal date/time equals the time given with this command.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `yyyy` | År |
-| `MM` | Måned |
-| `dd` | Dag |
-| `hh` | Timer i 24-timers notasjon |
-| `mm` | Minutter |
-| `ss` | Sekunder (heltallsverdi) |
+| `yyyy` | Year |
+| `MM` | Month |
+| `dd` | Day |
+| `hh` | Hours in 24-hour notation |
+| `mm` | Minutes |
+| `ss` | Seconds (integer value) |
 
-- **\*RST-tilstand:** `2002,1,1,0,0,0`
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** `2002,1,1,0,0,0`
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 CALC:INT:STAR:TIME 2002,01,12,12,30,00
-CALC:INT:STAR:TIME?    Respons: 2002,01,12,12,30,00
+CALC:INT:STAR:TIME?    Response: 2002,01,12,12,30,00
 ```
 
 #### `CALCulate:INTegral:STOP:SOURce CMD | TIME | MAN | TINTerval`
 
-Angir stoppbetingelsen for integrasjon. Å stoppe integrasjonen nullstiller ikke de integrerte verdiene.
+Sets the stop condition for integration. Stopping integration does not clear the integrated values.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `CMD` | Integrasjonen stopper ved mottak av kommandoen `CALCulate:INTegral:STOP[:IMMediate]`. |
-| `TIME` | Integrasjonen stopper på et tidspunkt angitt med kommandoen `CALCulate:INTegral:STOP:TIME`. |
-| `MAN` | Integrasjonen stopper når brukeren trykker F2-tasten på frontpanelet fra integrasjonsmåleskjermen på instrumentet. |
-| `TINTerval` | Integrasjonen stopper etter at intervallet angitt med `CALCulate:INTegral:STOP:TINTerval` har utløpt, regnet fra integrasjonsstart. |
+| `CMD` | Integration stops on receipt of the command `CALCulate:INTegral:STOP[:IMMediate]`. |
+| `TIME` | Integration stops at a time given with the command `CALCulate:INTegral:STOP:TIME`. |
+| `MAN` | Integration stops when the user presses the F2 key on the front panel from the integration measurement screen on the instrument. |
+| `TINTerval` | Integration stops after the interval given with `CALCulate:INTegral:STOP:TINTerval` has elapsed, counted from integration start. |
 
-- **\*RST-tilstand:** `CMD`
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** `CMD`
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 CALC:INT:STOP:SOUR CMD
-CALC:INT:STOP:SOUR?    Respons: CMD
+CALC:INT:STOP:SOUR?    Response: CMD
 ```
 
 #### `CALCulate:INTegral:STOP[:IMMediate]`
 
-Stopper integrasjonen umiddelbart. Å stoppe integrasjonen nullstiller ikke de integrerte verdiene.
+Stops integration immediately. Stopping integration does not clear the integrated values.
 
-Forsøk på å bruke denne kommandoen når `CALCulate:INTegral:STARt:SOURce` ikke er satt til `CMD`, genererer feilen «-221, Settings conflict». *(Slik står det i manualen.)*
+Attempting to use this command when `CALCulate:INTegral:STARt:SOURce` is not set to `CMD` generates the error "-221, Settings conflict". *(As stated in the manual.)*
 
-- **Parametre:** –
-- **\*RST-tilstand:** –
-- **Invaliderer / invalideres av:** –
+- **Parameters:** –
+- **\*RST state:** –
+- **Invalidates / invalidated by:** –
 
-Eksempel:
+Example:
 
 ```
 CALC:INT:STOP
@@ -1357,175 +1357,175 @@ CALC:INT:STOP
 
 #### `CALCulate:INTegral:STOP:TIME <yyyy,MM,dd,hh,mm,ss>`
 
-Angir stopptidspunkt for integrasjonen. Integrasjonen stopper når instrumentets interne dato/klokkeslett er lik tiden angitt med denne kommandoen.
+Sets the stop time for integration. Integration stops when the instrument's internal date/time equals the time given with this command.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `yyyy` | År |
-| `MM` | Måned |
-| `dd` | Dag |
-| `hh` | Timer i 24-timers notasjon |
-| `mm` | Minutter |
-| `ss` | Sekunder (heltallsverdi) |
+| `yyyy` | Year |
+| `MM` | Month |
+| `dd` | Day |
+| `hh` | Hours in 24-hour notation |
+| `mm` | Minutes |
+| `ss` | Seconds (integer value) |
 
-- **\*RST-tilstand:** `2010,1,1,0,0,0`
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** `2010,1,1,0,0,0`
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 CALC:INT:STOP:TIME 2002,01,12,12,30,00
-CALC:INT:STOP:TIME?    Respons: 2002,01,12,12,30,00
+CALC:INT:STOP:TIME?    Response: 2002,01,12,12,30,00
 ```
 
 #### `CALCulate:INTegral:STOP:TINTerval <interval>`
 
-Angir integrasjonsintervallet i sekunder. Integrasjonen stopper etter at dette intervallet har utløpt, regnet fra integrasjonsstart.
+Sets the integration interval in seconds. Integration stops after this interval has elapsed, counted from integration start.
 
-- **Parametre:** `1.0e-3` til `9.99e+6`
-- **\*RST-tilstand:** `6.00000E+01`
-- **Invaliderer / invalideres av:** –
+- **Parameters:** `1.0e-3` to `9.99e+6`
+- **\*RST state:** `6.00000E+01`
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 CALC:INT:STOP:TINT 1.0
-CALC:INT:STOP:TINT?    Respons: 1.0
+CALC:INT:STOP:TINT?    Response: 1.0
 ```
 
 #### `CALCulate:HARMonic:ORDer <order>`
 
-Angir harmonisk orden for målefunksjonen `VOLTage[1..6|460]:HAR[:MINimum|MAXimum]`.
+Sets the harmonic order for the measurement function `VOLTage[1..6|460]:HAR[:MINimum|MAXimum]`.
 
-- **Parametre:** `0` til `40` (for øyeblikket er kun `1` gyldig)
-- **\*RST-tilstand:** `1`
-- **Invaliderer / invalideres av:** –
+- **Parameters:** `0` to `40` (currently only `1` is valid)
+- **\*RST state:** `1`
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 CALC:HARM:ORD 1
-CALC:HARM:ORD?    Respons: 1
+CALC:HARM:ORD?    Response: 1
 ```
 
 #### `CALCulate:POWer[460]:EFFiciency:REFerence <function1>,<function2>`
 
-Angir to funksjoner for brukerdefinert beregning av elektrisk virkningsgrad.
+Sets two functions for user-defined computation of electrical efficiency.
 
-- `CALCulate:POWer:EFFiciency:REFerence` angir variabler for elektrisk virkningsgrad for det 1. 2- eller 3-fasesystemet (`POWer:EFFiciency`).
-- `CALCulate:POWer460:EFFiciency:REFerence` angir variabler for elektrisk virkningsgrad for det 2. 3-fasesystemet (`POWer460:EFFiciency`).
+- `CALCulate:POWer:EFFiciency:REFerence` sets the electrical efficiency variables for the 1st 2- or 3-phase system (`POWer:EFFiciency`).
+- `CALCulate:POWer460:EFFiciency:REFerence` sets the electrical efficiency variables for the 2nd 3-phase system (`POWer460:EFFiciency`).
 
-- **Parametre:** `<function1>` og `<function2>` kan være hvilken som helst av de midlede aktive effektene instrumentet måler: `"POWer[1..6|460][:ACTive]"`
-- **\*RST-tilstand:** avhenger av instrumenttype og antall installerte faser.
-- **Invaliderer / invalideres av:** –
+- **Parameters:** `<function1>` and `<function2>` may be any of the averaged active powers the instrument measures: `"POWer[1..6|460][:ACTive]"`
+- **\*RST state:** depends on instrument type and number of installed phases.
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 CALC:POW:EFF:REF "POW460", "POW1"
-CALC:POW:EFF:REF?    Respons: "POW460", "POW1"
+CALC:POW:EFF:REF?    Response: "POW460", "POW1"
 ```
 
 #### `CALCulate:POWer:CORRected STAR | DELTa`
 
-Velger fase-til-nøytral- eller fase-til-fase-spenninger for beregning av tomgangstapsmålinger (no load loss) på transformatorer i henhold til IEC60076-1 (målefunksjonen `POWer[1|2|3|4|5|6|460]:CORRected`).
+Selects phase-to-neutral or phase-to-phase voltages for the computation of no-load loss measurements on transformers according to IEC60076-1 (the measurement function `POWer[1|2|3|4|5|6|460]:CORRected`).
 
-I et 3-faseinstrument er `STAR` ikke mulig sammen med W2 (Aron); parameteren settes da automatisk til `DELTa`. Hvis det er flere enn 3 faser, kan `STAR` fortsatt velges i modus W2, men den gjelder da kun fase 4 og oppover. Pcorr fra det første systemet er da ikke tilgjengelig.
+In a 3-phase instrument, `STAR` is not possible together with W2 (Aron); the parameter is then set automatically to `DELTa`. If there are more than 3 phases, `STAR` can still be selected in W2 mode, but it then applies only to phase 4 and above. Pcorr from the first system is then not available.
 
-Kommandoen aksepteres kun av firmwareversjon V1.4 og nyere.
+The command is only accepted by firmware version V1.4 and later.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `STAR` | Bruk fase-til-nøytral-spenninger (stjernekobling/wye). |
-| `DELTa` | Bruk fase-til-fase-spenninger (deltakobling). |
+| `STAR` | Use phase-to-neutral voltages (star/wye connection). |
+| `DELTa` | Use phase-to-phase voltages (delta connection). |
 
-- **\*RST-tilstand:** `CALCulate:POWer:CORRected?`: `STAR`
-- **Invaliderer:** –
-- **Invalideres av:** `ROUTe:SYST "2W"` (kun 3-faseinstrumenter)
+- **\*RST state:** `CALCulate:POWer:CORRected?`: `STAR`
+- **Invalidates:** –
+- **Invalidated by:** `ROUTe:SYST "2W"` (3-phase instruments only)
 
-Eksempler:
+Examples:
 
 ```
 CALC:POW:CORR DELT
-CALC:POW:CORR?    Respons: DELT
+CALC:POW:CORR?    Response: DELT
 ```
 
-### DISPlay-subsystemet
+### The DISPlay subsystem
 
-DISPlay-subsystemet inneholder kommandoer for å styre displayet.
+The DISPlay subsystem contains commands for controlling the display.
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
 | `:DISPlay[:WINDow][:STATe]` | `ON \| OFF` | `OFF` | |
 | `:DISPlay:USER:FUNCtion` | `<function list>` | – | |
 
 #### `:DISPlay[:WINDow][:STATe] ON | OFF`
 
-Styrer om instrumentets prosessor oppdaterer displayet. Lysstyrke eller strømforbruk for displayet påvirkes ikke av denne kommandoen.
+Controls whether the instrument's processor updates the display. Display brightness and power consumption are not affected by this command.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `ON` | Displayet oppdateres av prosessoren. |
-| `OFF` | Instrumentets prosessor oppdaterer ikke displayet, noe som frigjør mer prosessorkraft til omfattende beregninger. |
+| `ON` | The display is updated by the processor. |
+| `OFF` | The instrument's processor does not update the display, freeing more processing power for extensive computations. |
 
-- **\*RST-tilstand:** `OFF`
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** `OFF`
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 DISP ON
-DISP?    Respons: ON
+DISP?    Response: ON
 ```
 
 #### `:DISPlay:USER:FUNCtion <function>{,<function>}`
 
-Angir funksjonslisten for den brukerdefinerte måleskjermen.
+Sets the function list for the user-defined measurement screen.
 
-- **Parametre:** `<function>{,<function>}`
-- **\*RST-tilstand:** tom liste = ingen verdier definert
-- **Invaliderer / invalideres av:** –
+- **Parameters:** `<function>{,<function>}`
+- **\*RST state:** empty list = no values defined
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 DISP:USER:FUNC "VOLT1:PHIGH","VOLT1:PLOW","VOLT1:PTP"
-DISP:USER:FUNC?    Respons: "VOLT1:PHIGH","VOLT1:PLOW","VOLT1:PTP"
+DISP:USER:FUNC?    Response: "VOLT1:PHIGH","VOLT1:PLOW","VOLT1:PTP"
 ```
 
-### FORMat-subsystemet
+### The FORMat subsystem
 
-FORMat-subsystemet setter dataformatet for overføring av numeriske måledata og målearrayer. Dette dataformatet brukes for responsdata av de kommandoene som spesifikt er angitt å påvirkes av FORMat-subsystemet.
+The FORMat subsystem sets the data format for the transfer of numeric measurement data and measurement arrays. This data format is used for the response data of those commands specifically stated to be affected by the FORMat subsystem.
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
-| `:FORMat[:DATA]` | `ASCii \| REAL`, `0 to 8 \| 32 \| 64` | `ASCii` | Standardlengde for REAL er 64 |
-| `:FORMat[:DATA]:STATus` | `ASCii \| INTeger, 8 \| 16 \| 32` | `ASCii` | Standardlengde for INTeger er 8 |
-| `:FORMat:BORDer` | `NORMal \| SWAPped` | `NORMal` | Lengde kun for INTeger |
+| `:FORMat[:DATA]` | `ASCii \| REAL`, `0 to 8 \| 32 \| 64` | `ASCii` | Default length for REAL is 64 |
+| `:FORMat[:DATA]:STATus` | `ASCii \| INTeger, 8 \| 16 \| 32` | `ASCii` | Default length for INTeger is 8 |
+| `:FORMat:BORDer` | `NORMal \| SWAPped` | `NORMal` | Length for INTeger only |
 | `:FORMat:TRANspose` | `ON \| OFF` | `OFF` | |
 
 #### `FORMat[:DATA] ASCii | INTeger | REAL, [0..8] | 16 | [32 | 64]`
 
-Angir dataformatet for overføring av måleverdiene fra instrumentet. Kommandoen gjelder alle typer måledata: midlede målinger, minneopptak, spektrum-/FFT-data osv. Hvis `<length>` ikke angis, bruker instrumentet siste gyldige innstilling.
+Sets the data format for the transfer of measurement values from the instrument. The command applies to all types of measurement data: averaged measurements, memory recordings, spectrum/FFT data and so on. If `<length>` is not given, the instrument uses the last valid setting.
 
-Denne kommandoen er koblet med `FORMat[:DATA]:STATus`. En endring fra ASCii- (tekst-) format til REAL | INTeger (binært) format eller omvendt via enten `FORMat[:DATA]` eller `FORMat[:DATA]:STATus`, endrer begge formatene – både måledata- og statusinformasjonsformatet. Disse formatene er alltid enten begge tekst eller begge binære. Siste gyldige lengde brukes for det indirekte endrede formatet.
+This command is coupled with `FORMat[:DATA]:STATus`. A change from ASCii (text) format to REAL | INTeger (binary) format or vice versa, via either `FORMat[:DATA]` or `FORMat[:DATA]:STATus`, changes both formats — both the measurement data and the status information format. These formats are always either both text or both binary. The last valid length is used for the indirectly changed format.
 
-**Parametre – type:**
+**Parameters – type:**
 
-| Type | Betydning |
+| Type | Meaning |
 |---|---|
-| `ASCii` | Data overføres som flyttallsverdi formatert som streng. Flere ASCii-dataverdier skilles med komma. Lengden angir antall mantissesifre i vitenskapelig notasjon. Hvis målestatusen er feil (8), er måleverdien NaN = +9.91E+37. |
-| `REAL` | Data overføres som flyttall av angitt lengde i «definite-length block»-binærformat: `#abbbb....` der ett tegn ('0'–'9') angir antall b-tegn som gir antall databytes, deretter antall databytes som følger umiddelbart, og så selve databytene. REAL-data er som standard i big-endian-byterekkefølge. Byterekkefølgen kan endres med kommandoen `FORMat:BORDer`. |
+| `ASCii` | Data is transferred as a floating point value formatted as a string. Multiple ASCii data values are separated by commas. The length states the number of mantissa digits in scientific notation. If the measurement status is error (8), the measurement value is NaN = +9.91E+37. |
+| `REAL` | Data is transferred as floating point numbers of the stated length in definite-length block binary format: `#abbbb....` where one character ('0'–'9') gives the number of b characters that state the number of data bytes, then the number of data bytes that follow immediately, and then the data bytes themselves. REAL data is by default in big-endian byte order. The byte order can be changed with the `FORMat:BORDer` command. |
 
-**Parametre – lengde [bits]:**
+**Parameters – length [bits]:**
 
-| Lengde | Betydning |
+| Length | Meaning |
 |---|---|
-| `0 to 8` | Gjelder ASCii. Lengden angir antall mantissesifre i vitenskapelig notasjon. For lengder ulik null formateres verdiene med C-formatstrengen `"%+.(length-1)e"`. En `<length>`-verdi på null betyr at enheten selv velger antall signifikante sifre som returneres. Maksimal lengde for ASCii er 8. Standardlengden er 6. |
-| `16` | Gjelder INTeger. Angir antall biter som representerer det fortegnsbestemte heltallet. |
-| `32 \| 64` | Gjelder REAL. Angir lengden på den binære representasjonen av flyttallet i biter (standard er 64). |
+| `0 to 8` | Applies to ASCii. The length states the number of mantissa digits in scientific notation. For non-zero lengths the values are formatted with the C format string `"%+.(length-1)e"`. A `<length>` value of zero means the unit itself chooses the number of significant digits returned. The maximum length for ASCii is 8. The default length is 6. |
+| `16` | Applies to INTeger. States the number of bits representing the signed integer. |
+| `32 \| 64` | Applies to REAL. States the length of the binary representation of the floating point number in bits (default is 64). |
 
-Hvis målestatusen er feil (8), er måleverdien IEEE 754 NaN:
+If the measurement status is error (8), the measurement value is IEEE 754 NaN:
 
 ```
 FORMat:BORDer SWAPped
@@ -1536,147 +1536,147 @@ REAL,32 = {0x7F, 0xC0, 0, 0}
 REAL,64 = {0x7F, 0xF8, 0, 0, 0, 0, 0, 0}
 ```
 
-- **Respons:** `<type>,[<length>]`
-- **\*RST-tilstand:** `ASCii,6`
-- **Invaliderer:** `FORMat[:DATA]:STATus`
-- **Invalideres av:** `FORMat[:DATA]:STATus`
+- **Response:** `<type>,[<length>]`
+- **\*RST state:** `ASCii,6`
+- **Invalidates:** `FORMat[:DATA]:STATus`
+- **Invalidated by:** `FORMat[:DATA]:STATus`
 
-Eksempler:
+Examples:
 
 ```
 FORM ASC,6
 FORM REAL,32
-FORM?    Respons: REAL,64
+FORM?    Response: REAL,64
 ```
 
 #### `FORMat[:DATA]:STATus ASCii | INTeger, [8] | 16 | 32`
 
-Angir formatet for statusinformasjonen ved overføring av måleverdiene fra instrumentet. Statusinformasjon er et heltall.
+Sets the format for the status information when transferring measurement values from the instrument. Status information is an integer.
 
-Kommandoen gjelder midlede målinger og minneopptak av midlede data. Hvis `<length>` ikke angis, bruker instrumentet siste gyldige innstilling.
+The command applies to averaged measurements and memory recordings of averaged data. If `<length>` is not given, the instrument uses the last valid setting.
 
-Denne kommandoen er koblet med `FORMat[:DATA]`. En endring fra ASCii- (tekst-) format til REAL | INTeger (binært) format eller omvendt via enten `FORMat[:DATA]` eller `FORMat[:DATA]:STATus`, endrer begge formatene – både måledata- og statusinformasjonsformatet. Disse formatene er alltid enten begge tekst eller begge binære. Siste gyldige lengde brukes for det indirekte endrede formatet.
+This command is coupled with `FORMat[:DATA]`. A change from ASCii (text) format to REAL | INTeger (binary) format or vice versa, via either `FORMat[:DATA]` or `FORMat[:DATA]:STATus`, changes both formats — both the measurement data and the status information format. These formats are always either both text or both binary. The last valid length is used for the indirectly changed format.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `ASCii` | Statusinformasjonen overføres som heltallsverdi formatert som streng. Flere statusinformasjonsverdier skilles med komma. Lengde er ikke gyldig for ASCii-format av statusinformasjon. |
-| `INTeger,[8]\|16\|32` | Statusinformasjonsverdien overføres som binært heltall av angitt lengde. INTeger-statusinformasjonsverdier er i big-endian-byterekkefølge. For standardlengden på 8 biter kan lengden utelates. |
+| `ASCii` | The status information is transferred as an integer value formatted as a string. Multiple status information values are separated by commas. Length is not valid for the ASCii format of status information. |
+| `INTeger,[8]\|16\|32` | The status information value is transferred as a binary integer of the stated length. INTeger status information values are in big-endian byte order. For the default length of 8 bits, the length can be omitted. |
 
-- **Respons:** `<type>,[<length>]`
-- **\*RST-tilstand:** `ASCii`
-- **Invaliderer:** `FORMat[:DATA]`
-- **Invalideres av:** `FORMat[:DATA]`
+- **Response:** `<type>,[<length>]`
+- **\*RST state:** `ASCii`
+- **Invalidates:** `FORMat[:DATA]`
+- **Invalidated by:** `FORMat[:DATA]`
 
-Eksempler:
+Examples:
 
 ```
 FORM:STAT ASC
 FORM:STAT INT,8
-FORM?    Respons: INT,8
+FORM?    Response: INT,8
 ```
 
 #### `FORMat:BORDer NORMal | SWAPped`
 
-Angir om binærdataene som overføres over grensesnittet er i normal (Motorola) eller byttet (swapped, Intel) byterekkefølge. Kommandoen gjelder alle typer binære måledata: midlede målinger, minneopptak, spektrum-/FFT-data osv.
+States whether binary data transferred over the interface is in normal (Motorola) or swapped (Intel) byte order. The command applies to all types of binary measurement data: averaged measurements, memory recordings, spectrum/FFT data and so on.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `NORMal` | Big-endian-dataformat (Motorola). |
-| `SWAPped` | Little-endian-dataformat (Intel). |
+| `NORMal` | Big-endian data format (Motorola). |
+| `SWAPped` | Little-endian data format (Intel). |
 
-- **Respons:** `<format>`
-- **\*RST-tilstand:** `NORMal`
-- **Invaliderer / invalideres av:** –
+- **Response:** `<format>`
+- **\*RST state:** `NORMal`
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 FORM:BORD SWAP
-FORM:BORD?    Respons: SWAP
+FORM:BORD?    Response: SWAP
 ```
 
 #### `FORMat:TRANspose ON | OFF`
 
-Kommandoen gjelder minneopptak (TRACe) og utmating av spektrumdata. Dataene kan betraktes som en 2D-array (matrise). Kommandoen velger om rader og kolonner i matrisen skal byttes om.
+The command applies to memory recording (TRACe) and to spectrum data output. The data can be regarded as a 2D array (matrix). The command selects whether the rows and columns of the matrix are swapped.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `ON` | Verdiene grupperes per målefunksjon: alle verdier for funksjon 1, alle verdier for funksjon 2, ... |
-| `OFF` | Verdiene grupperes per intervall/spektrumlinje: alle verdier fra intervall 1, alle verdier fra intervall 2, ... |
+| `ON` | The values are grouped per measurement function: all values for function 1, all values for function 2, ... |
+| `OFF` | The values are grouped per interval/spectrum line: all values from interval 1, all values from interval 2, ... |
 
-- **\*RST-tilstand:** `OFF`
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** `OFF`
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 FORM:TRAN ON
-FORM:TRAN?    Respons: ON
+FORM:TRAN?    Response: ON
 ```
 
-### HARDcopy-subsystemet (HCOPy)
+### The HARDcopy subsystem (HCOPy)
 
-HARDcopy-subsystemet inneholder kommandoer for å hente ut bildet av instrumentskjermen.
+The HARDcopy subsystem contains commands for retrieving the image of the instrument screen.
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
-| `:HCOPy:SDUMp:DATA?` | – | – | Kun query |
+| `:HCOPy:SDUMp:DATA?` | – | – | Query only |
 
 #### `HCOPy:SDUMp:DATA?`
 
-Returnerer skjermdump-data (i internt format som aksepteres av PC-programmet for overføring av instrumentskjermbilder).
+Returns screen dump data (in the internal format accepted by the PC program for transferring instrument screen images).
 
-- **Parametre:** –
-- **Respons:** blokk med RLE-kodede skjermdata
-- **\*RST-tilstand:** –
-- **Invaliderer / invalideres av:** –
+- **Parameters:** –
+- **Response:** block of RLE-encoded screen data
+- **\*RST state:** –
+- **Invalidates / invalidated by:** –
 
-Eksempel:
+Example:
 
 ```
 HCOP:SDUM:DATA?
-Respons: Blokk med RLE-kodede skjermdata
+Response: Block of RLE-encoded screen data
 ```
 
-### INITiate-subsystemet
+### The INITiate subsystem
 
-INITiate-subsystemet styrer driften av instrumentets midlingsfunksjonalitet (averaging). Hvis minneopptak er aktivert, initierer det også trigger-/synkroniseringssubsystemet.
+The INITiate subsystem controls the operation of the instrument's averaging functionality. If memory recording is enabled, it also initiates the trigger/synchronization subsystem.
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
 | `:INITiate:CONTinuous` | `ON \| OFF` | `ON` | |
-| `:INITiate[:IMMediate]` | – | – | Ingen query |
+| `:INITiate[:IMMediate]` | – | – | No query |
 | `:INITiate[:IMMediate]:SEQuence1` | – | – | |
 | `:INITiate[:IMMediate]:NAME` | `STARt` | – | |
 
 #### `INITiate:CONTinuous ON | OFF`
 
-Styrer kontinuerlig-tilstanden for midlingsfunksjonaliteten. Hvis satt til `ON`, starter instrumentet automatisk en ny midlingssyklus når den forrige er ferdig. `INITiate:CONTinuous ON` bør brukes for målinger uten hull (gap-free).
+Controls the continuous state of the averaging functionality. If set to `ON`, the instrument automatically starts a new averaging cycle when the previous one has finished. `INITiate:CONTinuous ON` should be used for gap-free measurements.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `ON` | Fri-løp-modus (free-run). Instrumentet starter automatisk ny midlingssyklus når den forrige er ferdig. |
-| `OFF` | Enkeltskudd-modus (single-shot). Instrumentet utfører én midlingssyklus ved mottak av enten `INIT[:IMMediate]` eller `*TRG`. Instrumentet settes deretter tilbake i IDLE-tilstand. |
+| `ON` | Free-run mode. The instrument automatically starts a new averaging cycle when the previous one has finished. |
+| `OFF` | Single-shot mode. The instrument performs one averaging cycle on receipt of either `INIT[:IMMediate]` or `*TRG`. The instrument is then returned to the IDLE state. |
 
-- **\*RST-tilstand:** `ON`
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** `ON`
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 INIT:CONT ON
-INIT:CONT?    Respons: 1
+INIT:CONT?    Response: 1
 ```
 
 #### `INITiate[:IMMediate]`
 
-Forlater IDLE-tilstanden og starter én enkelt midlingssyklus. Når denne midlingssyklusen er fullført, settes instrumentet tilbake i IDLE-tilstand. Hvis enheten ikke er i IDLE, eller hvis `INITiate:CONTinuous` er satt til `ON`, har en IMM-kommando ingen effekt og feilen -213 genereres.
+Leaves the IDLE state and starts a single averaging cycle. When this averaging cycle is complete, the instrument is returned to the IDLE state. If the unit is not in IDLE, or if `INITiate:CONTinuous` is set to `ON`, an IMM command has no effect and error -213 is generated.
 
-- **Parametre:** –
-- **\*RST-tilstand:** –
-- **Invaliderer / invalideres av:** –
+- **Parameters:** –
+- **\*RST state:** –
+- **Invalidates / invalidated by:** –
 
-Eksempel:
+Example:
 
 ```
 INIT
@@ -1684,316 +1684,316 @@ INIT
 
 #### `INITiate[:IMMediate]:SEQuence1` / `INITiate[:IMMediate]:NAME STARt`
 
-Initierer starttriggeren for minneopptak (memory acquisition). Etter initiering fylles pretriggeren (hvis > 0). Pretriggeren er fylt når «waiting for trigger»-biten i OPER:STAT-registeret er satt til 1. `STARt` er et alias for `SEQuence1`.
+Initiates the start trigger for memory acquisition. After initiation, the pretrigger (if > 0) is filled. The pretrigger is full when the "waiting for trigger" bit in the OPER:STAT register is set to 1. `STARt` is an alias for `SEQuence1`.
 
-- **Parametre:** –
-- **\*RST-tilstand:** –
-- **Invaliderer / invalideres av:** –
+- **Parameters:** –
+- **\*RST state:** –
+- **Invalidates / invalidated by:** –
 
-Eksempel:
+Example:
 
 ```
 INITiate:NAME STARt
 ```
 
-### INPut-subsystemet
+### The INPut subsystem
 
-INPut-subsystemet styrer egenskapene til inngangskanalene. Numeriske suffikser på INPut-noden tilsvarer maskinvareinngangskanal på instrumentet. For 6-kanalsmodeller er de gyldige elektriske kanalsuffiksene 1 til 6. For 12-kanalsmodeller er de gyldige elektriske kanalsuffiksene 1 til 12. Det elektriske INPut-subsystemet skiller ikke mellom strøm- og spenningskanaler. Inngangsfilterinnstillingene er felles for alle elektriske kanaler, så kanalsuffiksene kan utelates, selv om de er implementert av kompatibilitetshensyn. Hvis kanalsuffikset utelates, gjelder kommandoen inngang 1.
+The INPut subsystem controls the characteristics of the input channels. Numeric suffixes on the INPut node correspond to the hardware input channel on the instrument. For 6-channel models the valid electrical channel suffixes are 1 to 6. For 12-channel models the valid electrical channel suffixes are 1 to 12. The electrical INPut subsystem does not distinguish between current and voltage channels. The input filter settings are common to all electrical channels, so the channel suffixes can be omitted, even though they are implemented for compatibility reasons. If the channel suffix is omitted, the command applies to input 1.
 
-For Process Interface-opsjonen er de gyldige mekaniske kanalsuffiksene 21 til 24 (momentinngang 1..4) og 25 til 28 (turtallsinngang 1..4). Se avsnitt 2.1.10 SENSe2 Subsystem for detaljert beskrivelse.
+For the Process Interface option, the valid mechanical channel suffixes are 21 to 24 (torque input 1..4) and 25 to 28 (speed input 1..4). See section 2.1.10 SENSe2 Subsystem for a detailed description.
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
 | `:INPut[1..12]:COUPling` | `AC \| DC` | `DC` | |
-| `:INPut[1..12]:GAIN` | `0 to 1.0e12` | `1.0` | Kun strømkanaler |
+| `:INPut[1..12]:GAIN` | `0 to 1.0e12` | `1.0` | Current channels only |
 | `:INPut[1..12]:FILTer[:STATe]` | `ON \| OFF` | `ON` | |
-| `:INPut[1..12]:FILTer[:LPASs]:FREQuency?` | – | Enhetsavhengig | Kun query |
-| `:INPut[1..12]:SHUNt` | `INTernal \| EXTernal` | `INTernal` | Kun strømkanaler |
-| `:INPut[21..28]:TYPE` | `VOLTage \| FREQuency` | – | Opsjon Process Interface |
+| `:INPut[1..12]:FILTer[:LPASs]:FREQuency?` | – | Device dependent | Query only |
+| `:INPut[1..12]:SHUNt` | `INTernal \| EXTernal` | `INTernal` | Current channels only |
+| `:INPut[21..28]:TYPE` | `VOLTage \| FREQuency` | – | Process Interface option |
 
 #### `INPut[1..12]:COUPling AC | DC`
 
-Setter inngangskoblingen for den valgte inngangskanalen.
+Sets the input coupling for the selected input channel.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `AC` | DC-komponenten fjernes fra signalet før videre behandling. Denne koblingen kompenserer for eventuelle DC-forskyvninger (offsets) på signalet. |
-| `DC` | Signalet forblir urørt og alle komponentene sendes videre til behandling. Denne koblingen bør brukes for ekte RMS-beregninger (true RMS). |
+| `AC` | The DC component is removed from the signal before further processing. This coupling compensates for any DC offsets on the signal. |
+| `DC` | The signal is left untouched and all components are passed on for processing. This coupling should be used for true RMS computations. |
 
-- **\*RST-tilstand:** `DC` for alle kanaler
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** `DC` for all channels
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 INP1:COUP AC
-INP2:COUP?    Respons: DC
+INP2:COUP?    Response: DC
 ```
 
 #### `INPut[1|2|3|4|5|6|7|8|9|10|11|12]:GAIN <gain>`
 
-Setter shuntfaktoren for strøminngangene. Innstillingen gjelder når EXTernal inngangsshunt er valgt. De partallige (spennings-) kanalnumrene er kun tilgjengelige på instrumenter utstyrt med PP59/PP69 power phase.
+Sets the shunt factor for the current inputs. The setting applies when the EXTernal input shunt is selected. The even (voltage) channel numbers are only available on instruments equipped with the PP59/PP69 power phase.
 
-- **Parametre:** `1.0e-7` til `1.0e+7`
-  - Denne enhetsløse forsterkningsfaktoren angir V/A-omsetningsforholdet til den eksterne shunten koblet til den angitte kanalen. Negative verdier er ikke tillatt.
-- **Respons:** `<gain>`
-- **\*RST-tilstand:** `1.0` for alle kanaler
-- **Invaliderer / invalideres av:** –
+- **Parameters:** `1.0e-7` to `1.0e+7`
+  - This dimensionless gain factor states the V/A conversion ratio of the external shunt connected to the specified channel. Negative values are not permitted.
+- **Response:** `<gain>`
+- **\*RST state:** `1.0` for all channels
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 INP1:GAIN 10.0
-INP3:GAIN?    Respons: 251.65
+INP3:GAIN?    Response: 251.65
 ```
 
 #### `INPut[1..12]:FILTer[:STATe] ON | OFF`
 
-Slår anti-alias-filtrene på inngangene på eller av. Filtrene på alle kanaler er koblet sammen, dvs. å aktivere/deaktivere filteret på én kanal aktiverer/deaktiverer filtrene på alle kanaler.
+Switches the anti-alias filters on the inputs on or off. The filters on all channels are coupled, i.e. enabling/disabling the filter on one channel enables/disables the filters on all channels.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `ON` | Anti-alias-filter aktivert. |
-| `OFF` | Anti-alias-filter deaktivert. |
+| `ON` | Anti-alias filter enabled. |
+| `OFF` | Anti-alias filter disabled. |
 
-- **\*RST-tilstand:** `ON` for alle kanaler
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** `ON` for all channels
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 INP:FILT ON
-INP:FILT?    Respons: 1
+INP:FILT?    Response: 1
 ```
 
 #### `INPut[1..12]:FILTer[:LPASs]:FREQuency?`
 
-Henter grensefrekvensen (cutoff) til anti-alias-lavpassfilteret. Alle inngangskanaler er utstyrt med de samme filtrene, så den returnerte verdien er alltid identisk for alle kanaler. Grensefrekvensen til anti-alias-filteret kan ikke endres.
+Reads the cutoff frequency of the anti-alias low-pass filter. All input channels are equipped with the same filters, so the value returned is always identical for all channels. The cutoff frequency of the anti-alias filter cannot be changed.
 
-- **Respons:** `<frequency>` i Hz
-- **\*RST-tilstand:** enhetsavhengig for alle kanaler
-- **Invaliderer / invalideres av:** –
+- **Response:** `<frequency>` in Hz
+- **\*RST state:** device dependent for all channels
+- **Invalidates / invalidated by:** –
 
-Eksempel:
+Example:
 
 ```
-INP:FILT:FREQ?    Respons: 300.0e3
+INP:FILT:FREQ?    Response: 300.0e3
 ```
 
 #### `INPut[1|2|3|4|5|6|7|8|9|10|11|12]:SHUNt INTernal | EXTernal`
 
-Velger shunten som brukes på strømkanalen. De partallige (spennings-) kanalnumrene er kun tilgjengelige på instrumenter utstyrt med PP59/PP69 power phase.
+Selects the shunt used on the current channel. The even (voltage) channel numbers are only available on instruments equipped with the PP59/PP69 power phase.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `INTernal` | Interne shunter opptil 10 A brukes. |
-| `EXTernal` | Ekstern shunt er tilkoblet. Shuntfaktoren må angis med kommandoen `INPut:GAIN`. |
+| `INTernal` | Internal shunts up to 10 A are used. |
+| `EXTernal` | An external shunt is connected. The shunt factor must be set with the `INPut:GAIN` command. |
 
-- **\*RST-tilstand:** `INTernal` for alle kanaler
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** `INTernal` for all channels
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 INP1:SHUN EXT
-INP3:SHUNt?    Respons: INT
+INP3:SHUNt?    Response: INT
 ```
 
-#### `INPut[21..28]:TYPe VOLTage | FREQuency` (opsjon Process Interface)
+#### `INPut[21..28]:TYPe VOLTage | FREQuency` (Process Interface option)
 
-Setter inngangstypen slik at den samsvarer med sensortypen.
+Sets the input type to match the sensor type.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `VOLTage` | Et DC-signal i området +/- 10 V forventes på inngangen. |
-| `FREQuency` | Et AC-signal med frekvens i området 1 Hz til 200 kHz forventes på inngangen. |
+| `VOLTage` | A DC signal in the range +/- 10 V is expected at the input. |
+| `FREQuency` | An AC signal with a frequency in the range 1 Hz to 200 kHz is expected at the input. |
 
-- **\*RST-tilstand:** `FREQuency`
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** `FREQuency`
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 INP21:TYP FREQ
-INP21:TYP?    Respons: FREQ
+INP21:TYP?    Response: FREQ
 ```
 
-### OUTPut-subsystemet
+### The OUTPut subsystem
 
-OUTPut-subsystemet styrer egenskapene til SYNC-utgangen.
+The OUTPut subsystem controls the characteristics of the SYNC output.
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
-| `:OUTPut9[:STATe]` | `ON \| OFF` | `OFF` | SYNC-utgang |
+| `:OUTPut9[:STATe]` | `ON \| OFF` | `OFF` | SYNC output |
 
 #### `OUTPut9[:STATe] ON | OFF`
 
-Setter tilstanden til synkroniseringsutgangen. Kan bare settes til `ON` hvis `SYNC:SOURce` ikke er satt til `EXTernal`.
+Sets the state of the synchronization output. Can only be set to `ON` if `SYNC:SOURce` is not set to `EXTernal`.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `ON` | Synkroniseringspulsene sendes ut på sync-inn-/utgangskontakten på baksiden. |
-| `OFF` | Ingen synkroniseringspulser sendes ut. |
+| `ON` | The synchronization pulses are output on the sync in/out connector on the rear. |
+| `OFF` | No synchronization pulses are output. |
 
-- **\*RST-tilstand:** `OFF`
-- **Invaliderer:** –
-- **Invalideres av:** `SYNC:SOURce EXTernal`
+- **\*RST state:** `OFF`
+- **Invalidates:** –
+- **Invalidated by:** `SYNC:SOURce EXTernal`
 
-Eksempler:
+Examples:
 
 ```
 OUTP9 ON
-OUTP9?    Respons: 0
+OUTP9?    Response: 0
 ```
 
-### ROUTe-subsystemet
+### The ROUTe subsystem
 
-ROUTe-subsystemet velger tilkoblingstypen instrumentet bruker for å måle på et trefasesystem.
+The ROUTe subsystem selects the connection type the instrument uses to measure on a three-phase system.
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
 | `:ROUTe:SYSTem` | `"3W" \| "2W"` | `"3W"` | |
 
 #### `ROUTe:SYSTem "3W" | "2W"`
 
-Velger tilkoblingstypen instrumentet bruker for å måle på et trefasesystem.
+Selects the connection type the instrument uses to measure on a three-phase system.
 
-**Merk:** Parameteren `2W` aksepteres kun av firmwareversjon 1.4 og høyere.
+**Note:** The `2W` parameter is only accepted by firmware version 1.4 and higher.
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `"3W"` | Tre-wattmeter-konfigurasjon. |
-| `"2W"` | To-wattmeter-konfigurasjon. |
+| `"3W"` | Three-wattmeter configuration. |
+| `"2W"` | Two-wattmeter configuration. |
 
-- **\*RST-tilstand:** `"3W"`
-- **Invaliderer / invalideres av:** –
+- **\*RST state:** `"3W"`
+- **Invalidates / invalidated by:** –
 
-Eksempler:
+Examples:
 
 ```
 ROUT:SYST "3W"
-ROUT:SYST?    Respons: "3W"
+ROUT:SYST?    Response: "3W"
 ```
 
-## Subsystemer: SENSe, SENSe2 og SOURce
+## Subsystems: SENSe, SENSe2 and SOURce
 
-### SENSe-subsystemet
+### The SENSe subsystem
 
-SENSe-subsystemet styrer instrumentets midlingsfunksjon (averaging) og beregningen av de grunnleggende midlede verdiene. Numeriske suffikser på nodene `VOLTage|CURRent` tilsvarer elektriske faser. Kanalene i INPut-subsystemet kombineres til faser i `SENSe:VOLTage|CURRent`-subsystemet som vist i tabellen nedenfor. Hvis kanalsuffikset utelates, gjelder kommandoen fase 1.
+The SENSe subsystem controls the instrument's averaging function and the computation of the basic averaged values. Numeric suffixes on the `VOLTage|CURRent` nodes correspond to electrical phases. The channels of the INPut subsystem are combined into phases in the `SENSe:VOLTage|CURRent` subsystem as shown in the table below. If the channel suffix is omitted, the command applies to phase 1.
 
-| Inngangskanal (suffiks)              | Elektrisk fase | Fasesuffiks i SENSe-subsystemet |
-|--------------------------------------|----------------|---------------------------------|
-| INPut1 (strøm), INPut2 (spenning)    | L1             | `SENSe:VOLTage|CURRent1`        |
-| INPut3 (strøm), INPut4 (spenning)    | L2             | `SENSe:VOLTage|CURRent2`        |
-| INPut5 (strøm), INPut6 (spenning)    | L3             | `SENSe:VOLTage|CURRent3`        |
-| INPut7 (strøm), INPut8 (spenning)    | L4             | `SENSe:VOLTage|CURRent4`        |
-| INPut9 (strøm), INPut10 (spenning)   | L5             | `SENSe:VOLTage|CURRent5`        |
-| INPut11 (strøm), INPut12 (spenning)  | L6             | `SENSe:VOLTage|CURRent6`        |
+| Input channel (suffix)               | Electrical phase | Phase suffix in the SENSe subsystem |
+|--------------------------------------|------------------|-------------------------------------|
+| INPut1 (current), INPut2 (voltage)   | L1             | `SENSe:VOLTage|CURRent1`        |
+| INPut3 (current), INPut4 (voltage)   | L2             | `SENSe:VOLTage|CURRent2`        |
+| INPut5 (current), INPut6 (voltage)   | L3             | `SENSe:VOLTage|CURRent3`        |
+| INPut7 (current), INPut8 (voltage)   | L4             | `SENSe:VOLTage|CURRent4`        |
+| INPut9 (current), INPut10 (voltage)  | L5             | `SENSe:VOLTage|CURRent5`        |
+| INPut11 (current), INPut12 (voltage) | L6             | `SENSe:VOLTage|CURRent6`        |
 
-SENSe-noden er standardnoden (default node) på rotnivået i kommandotreet. Standardnoden i SENSe-subsystemet er `POWer`. Alle faserelaterte SENSe-innstillinger er felles for både AC- og DC-kobling, så `AC | DC`-noden kan utelates (DC antas brukt). Noden `:AC[|:DC]` er kun implementert av kompatibilitetshensyn.
+The SENSe node is the default node at the root level of the command tree. The default node in the SENSe subsystem is `POWer`. All phase-related SENSe settings are common to both AC and DC coupling, so the `AC | DC` node can be omitted (DC is assumed). The `:AC[|:DC]` node is implemented for compatibility reasons only.
 
-#### Kommandooversikt (SENSe)
+#### Command overview (SENSe)
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
 | `[:SENSe]` | | | |
 | `  :CURRent[1..6]|VOLTage[1..6]` | | | |
 | `    :AC|[:DC]` | | | |
 | `      :RANGe` | | | |
 | `        [:UPPer]` | 0.3 to 1000 V | - [V] | VOLTage |
-| | 0.03 to 10 | - [A] | CURRent med INTernal shunt |
-| | 0.03 to 20 V | | CURRent med EXTernal shunt |
-| `        :AUTO` | ON \| OFF \| ONCE | ON | ONCE foreløpig ikke implementert |
-| `        :LIST?` | | | Kun spørring |
+| | 0.03 to 10 | - [A] | CURRent with INTernal shunt |
+| | 0.03 to 20 V | | CURRent with EXTernal shunt |
+| `        :AUTO` | ON \| OFF \| ONCE | ON | ONCE not yet implemented |
+| `        :LIST?` | | | Query only |
 | `      :SCALe` | 0.9 to 1.0e+7 | 1.0 [-] | |
 | `  [:POWer[1..6]]|CURRent[1..6]|VOLTage[1..6]` | | | |
 | `    :AC|[:DC]` | | | |
 | `      :APERture` | | | |
 | `        [:TIME]` | 15.0e-3 to 3.6e3 | 0.3 s | |
 | `  :SWEep` | | | |
-| `    :FREQuency?` | | enhetsavhengig | Kun spørring |
+| `    :FREQuency?` | | device dependent | Query only |
 | `  :FUNCtion` | | | |
 | `    [:ON]` | list of sens func | "" | |
-| `      :ALL` | | - | Ingen spørring |
-| `      :COUNt?` | | 0 | Kun spørring |
+| `      :ALL` | | - | No query |
+| `      :COUNt?` | | 0 | Query only |
 | `    :OFF` | | | |
 | `      :ALL` | | | |
 | `    :CONCurrent` | ON \| OFF | ON | |
-| `  :DATA?` | list of sens func | "" | Kun spørring |
-| `    :STATus?` | list of sens func | "" | Kun spørring |
+| `  :DATA?` | list of sens func | "" | Query only |
+| `    :STATus?` | list of sens func | "" | Query only |
 | `  :SWEep1|2` | | | |
 | `    :TIME` | \<value\> \| MAX | | |
-| `      :MAX?` | | | Kun spørring |
-| `    :POINTS?` | | | Kun spørring |
+| `      :MAX?` | | | Query only |
+| `    :POINTS?` | | | Query only |
 | `    :OFFSet` | | | |
 | `      :TIME` | 0 \| \<value\> \| MAX | | |
-| `      :POINTS?` | | | Kun spørring |
+| `      :POINTS?` | | | Query only |
 | `    [:STATe]` | ON \| OFF | OFF | |
 | `    :COUNt` | 1 to 65535 | 1 | |
 | `    :SFACtor` | 1 to 65535 | 1 | |
 | `    :FUNCtion` | \<function list\> | | |
 
-#### Skalering
+#### Scaling
 
 **`[SENSe:]CURRent[1..6]|VOLTage[1..6]:AC[|:DC]:SCALe <value>`**
 
-Setter skaleringsfaktoren for spenning/strøm, som gjenspeiler omsetningsforholdet til eventuelle spennings-/strømtransformatorer eller spenningsdelere som benyttes. Spenning eller strøm på den angitte kanalen multipliseres med denne skaleringsfaktoren før all videre behandling. Alle signalstørrelser som beregnes på grunnlag av strøm og/eller spenning, skaleres med denne faktoren.
+Sets the voltage/current scaling factor, which reflects the transformation ratio of any voltage/current transformers or voltage dividers used. The voltage or current on the specified channel is multiplied by this scaling factor before all further processing. All signal quantities computed on the basis of current and/or voltage are scaled by this factor.
 
-- **Parametre:** `0.9 to 1.0e+7`. Negative verdier er ikke tillatt.
-- **Tilstand etter `*RST`:** `1.0`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:** `0.9 to 1.0e+7`. Negative values are not permitted.
+- **State after `*RST`:** `1.0`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 VOLT3:SCAL 10.0
 CURR2:SCAL?          -> 10.0
 ```
 
-#### Områdevalg (Ranging)
+#### Ranging
 
 **`[SENSe:]CURRent[1..6]|VOLTage[1..6]:AC|[:DC]:RANGe[:UPPer] <value>`**
 
-Setter spennings-/strømområdet. Det angitte området er det faktiske området for instrumentets inngangskanal. Kanal-skaleringsfaktorer og eksterne shunter (`INPut:GAIN`) er ikke inkludert. Kommandoen setter RMS-verdien av området; det faktiske toppområdet (peak) er to ganger høyere. En områdeverdi innenfor det gyldige intervallet rundes opp til nærmeste høyere mulige verdi.
+Sets the voltage/current range. The range given is the actual range of the instrument's input channel. Channel scaling factors and external shunts (`INPut:GAIN`) are not included. The command sets the RMS value of the range; the actual peak range is twice as high. A range value within the valid interval is rounded up to the nearest higher possible value.
 
-- **Parametre:**
-  - `0.3 to 1000.0 V` – Område for spenningskanal. Gjelder spenningskanalene (2, 4, 6, 8, 10, 12).
-  - `0.03 to 10.0 A` – Område for strømkanal når `INPut:SHUNt` er satt til `INTernal`. Gjelder kanalene (1, 3, 5, 7, 9, 11).
-  - `0.03 to 10.0 V` – Område for strømkanal når `INPut:SHUNt` er satt til `EXTernal`. Området settes som spenning på spenningsinngangen til strømkanalen. Det faktiske strømområdet i ampere finnes ved å multiplisere denne verdien med `INPut:GAIN` for tilhørende kanal. Gjelder kanalene (1, 3, 5, 7, 9, 11).
-- **Tilstand etter `*RST`:** Etter reset er autorange PÅ, så det er ikke satt noe fast område.
-- **Ugyldiggjør:** `[SENSe:]CURRent[1..6]|VOLTage[1..6]:RANGe:AUTO ON`
-- **Ugyldiggjøres av:** `[SENSe:]CURRent[1..6]|VOLTage[1..6]:RANGe:AUTO ON`
+- **Parameters:**
+  - `0.3 to 1000.0 V` – Range for a voltage channel. Applies to the voltage channels (2, 4, 6, 8, 10, 12).
+  - `0.03 to 10.0 A` – Range for a current channel when `INPut:SHUNt` is set to `INTernal`. Applies to channels (1, 3, 5, 7, 9, 11).
+  - `0.03 to 10.0 V` – Range for a current channel when `INPut:SHUNt` is set to `EXTernal`. The range is set as the voltage at the voltage input of the current channel. The actual current range in amperes is found by multiplying this value by `INPut:GAIN` for the corresponding channel. Applies to channels (1, 3, 5, 7, 9, 11).
+- **State after `*RST`:** After reset, autorange is ON, so no fixed range is set.
+- **Invalidates:** `[SENSe:]CURRent[1..6]|VOLTage[1..6]:RANGe:AUTO ON`
+- **Invalidated by:** `[SENSe:]CURRent[1..6]|VOLTage[1..6]:RANGe:AUTO ON`
 
 ```scpi
 VOLT3:RANG 25.0
 CURR2:RANG?          -> 3.0
 ```
 
-#### Midling og områdelister
+#### Averaging and range lists
 
 **`[SENSe:]CURRent[1..6]|VOLTage[1..6]:AC[|:DC]:RANGe[:UPPer]:LIST?`**
 
-Spør etter en liste over gyldige spennings-/strømområder tilgjengelig på kanalen angitt med fasesuffikset. Den returnerte listen inneholder de faktiske områdene for instrumentets inngangskanaler. Kanal-skaleringsfaktorer og eksterne shunter (`INPut:GAIN`) er ikke inkludert. For strømkanaler avhenger listen av den aktuelle innstillingen av `INPut:SHUNt` (`EXTernal` eller `INTernal`).
+Queries a list of the valid voltage/current ranges available on the channel given by the phase suffix. The list returned contains the actual ranges of the instrument's input channels. Channel scaling factors and external shunts (`INPut:GAIN`) are not included. For current channels the list depends on the current setting of `INPut:SHUNt` (`EXTernal` or `INTernal`).
 
-- **Respons:** `<range_list>` – kommaseparert liste over områdeverdier.
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Response:** `<range_list>` – comma-separated list of range values.
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 CURR2:RANG:LIST?
--> 0.03, 0.1, 0.3, 1, 3, 10   (for innstillingen INPut:SHUNt INTernal)
+-> 0.03, 0.1, 0.3, 1, 3, 10   (for the INPut:SHUNt INTernal setting)
 ```
 
 **`[SENSe:]CURRent[1..6]|VOLTage[1..6]:AC[|:DC]:RANGe[:UPPer]:AUTO ON|OFF|ONCE`**
 
-Styrer autorange for spenning/strøm.
+Controls autorange for voltage/current.
 
-- **Parametre:**
-  - `ON` – Autorange er permanent PÅ. Overvåking av `STATus:OPERation`-registeret vil oppdage at området endres.
-  - `OFF` – Autorange er permanent AV.
-  - `ONCE` – ONCE er foreløpig ikke implementert.
-- **Tilstand etter `*RST`:** `ON`
-- **Ugyldiggjør:** `[SENSe:]CURRent[1..6]|VOLTage[1..6]:RANGe[:UPPer]`
-- **Ugyldiggjøres av:** `[SENSe:]CURRent[1..6]|VOLTage[1..6]:RANGe[:UPPer]`
+- **Parameters:**
+  - `ON` – Autorange is permanently ON. Monitoring the `STATus:OPERation` register will detect that the range changes.
+  - `OFF` – Autorange is permanently OFF.
+  - `ONCE` – ONCE is not yet implemented.
+- **State after `*RST`:** `ON`
+- **Invalidates:** `[SENSe:]CURRent[1..6]|VOLTage[1..6]:RANGe[:UPPer]`
+- **Invalidated by:** `[SENSe:]CURRent[1..6]|VOLTage[1..6]:RANGe[:UPPer]`
 
 ```scpi
 VOLT3:RANG:AUTO ON
@@ -2002,56 +2002,56 @@ CURR2:RANG:AUTO?     -> 0
 
 **`[SENSe:][:POWer[1..6]]|CURRent[1..6]|VOLTage[1..6]:AC[|:DC]:APERture[:TIME] <avgtime>`**
 
-Setter det nominelle midlingsintervallet. Spørring returnerer det innstilte nominelle midlingsintervallet. I synkron modus endres det faktiske midlingsintervallet fortløpende («on-the-fly»): det nominelle midlingsintervallet forlenges til neste hele signalperiode.
+Sets the nominal averaging interval. The query returns the nominal averaging interval that has been set. In synchronous mode the actual averaging interval changes on the fly: the nominal averaging interval is extended to the next whole signal period.
 
-For å spørre etter den faktiske midlingsperioden må kommandoen `:SENSe:DATA? "TIME[:INTerval]"` brukes.
+To query the actual averaging period, the command `:SENSe:DATA? "TIME[:INTerval]"` must be used.
 
-Hvis det nominelle midlingsintervallet endres med denne kommandoen, settes synkroniseringstimeouten (`SYNC:TIMeout`) til det nominelle midlingsintervallet eller 0.3 sekunder, avhengig av hva som er størst.
+If the nominal averaging interval is changed with this command, the synchronization timeout (`SYNC:TIMeout`) is set to the nominal averaging interval or 0.3 seconds, whichever is greater.
 
-> **Merk:** Nodene `[:POWer[1..6]]|CURRent[1..6]|VOLTage[1..6]:AC[|:DC]` er kun implementert for SCPI-kompatibilitet. Instrumentet arbeider med bare ett midlingsintervall for alle midlede målinger.
+> **Note:** The nodes `[:POWer[1..6]]|CURRent[1..6]|VOLTage[1..6]:AC[|:DC]` are implemented for SCPI compatibility only. The instrument works with just one averaging interval for all averaged measurements.
 
-- **Parametre:** `15 ms ... 3600 s`. Oppløsning 1 ms. Enheten er sekunder.
-- **Tilstand etter `*RST`:** `0.3 s`
-- **Ugyldiggjør:** `SYNC:TIMeout`
-- **Ugyldiggjøres av:** –
+- **Parameters:** `15 ms ... 3600 s`. Resolution 1 ms. The unit is seconds.
+- **State after `*RST`:** `0.3 s`
+- **Invalidates:** `SYNC:TIMeout`
+- **Invalidated by:** –
 
 ```scpi
 APER 0.2
 APER?                -> 1.5
 ```
 
-#### Samplingsfrekvens
+#### Sampling frequency
 
 **`[SENSe:]SWEep:FREQuency?`**
 
-Spør etter samplingsfrekvensen til instrumentets ADC-er. Samplingsfrekvensen er fast og kan ikke endres.
+Queries the sampling frequency of the instrument's ADCs. The sampling frequency is fixed and cannot be changed.
 
-- **Respons:** `<sample_rate>` – den faktiske samplingsfrekvensen instrumentet bruker for datainnsamling. Samplingsfrekvensen er felles for alle kanaler. Enheten er Hz.
-- **Tilstand etter `*RST`:** Enhetsavhengig:
+- **Response:** `<sample_rate>` – the actual sampling frequency the instrument uses for data acquisition. The sampling frequency is common to all channels. The unit is Hz.
+- **State after `*RST`:** Device dependent:
   - Norma 3000: 102.4 kHz
-  - Norma 4000: 341.33 kHz eller 1.024 MHz
-  - Norma 5000: 341.33 kHz eller 1.024 MHz
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+  - Norma 4000: 341.33 kHz or 1.024 MHz
+  - Norma 5000: 341.33 kHz or 1.024 MHz
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SWEep:FREQ?          -> 3.4133E+05
 ```
 
-#### Målefunksjoner
+#### Measurement functions
 
 **`[SENSe:]FUNCtion[:ON] <function>{,<function>}`**
 
-Kommandoen `FUNCtion[:ON]` velger hvilke(n) `<function>`(er) instrumentet skal måle (SENSe). `<function>` angis som en streng i anførselstegn, for eksempel: `FUNCtion "VOLTage:AC"`. Hvis `CONCurrent` er `OFF`, sendes én enkelt `<function>` som parameter; denne funksjonen velges som den som skal måles. Hvis mer enn én funksjon sendes, genereres feilen `-108 (Parameter not allowed)`. Hvis `CONCurrent` er `ON`, kan en kommaseparert liste av `<sensor_function>` sendes som parametre; disse funksjonene slås på, mens alle andre funksjoner slås av.
+The `FUNCtion[:ON]` command selects which `<function>`(s) the instrument is to measure (SENSe). `<function>` is given as a quoted string, for example: `FUNCtion "VOLTage:AC"`. If `CONCurrent` is `OFF`, a single `<function>` is passed as a parameter; that function is selected as the one to be measured. If more than one function is passed, the error `-108 (Parameter not allowed)` is generated. If `CONCurrent` is `ON`, a comma-separated list of `<sensor_function>` can be passed as parameters; those functions are switched on, while all other functions are switched off.
 
-Spørringen `FUNCtion[:ON]?` returnerer en kommaseparert liste over funksjoner som er PÅ, hver som `<STRING RESPONSE DATA>`. Hvis ingen funksjoner er PÅ, returneres en tom streng. Spørringen returnerer kortformene og utelater eventuelle standardnoder i `<function>`.
+The query `FUNCtion[:ON]?` returns a comma-separated list of the functions that are ON, each as `<STRING RESPONSE DATA>`. If no functions are ON, an empty string is returned. The query returns the short forms and omits any default nodes in `<function>`.
 
-Denne funksjonslisten lagres ikke med `*SAV` og nullstilles med `*RST`.
+This function list is not stored with `*SAV` and is cleared by `*RST`.
 
-- **Parametre:** `<function>{,<function>}`
-- **Tilstand etter `*RST`:** Tom liste = ingen verdier definert.
-- **Ugyldiggjør:** `[SENSe:]FUNCtion[:ON]:COUNt?`
-- **Ugyldiggjøres av:** `[SENSe:]FUNCtion[:ON]:ALL`, `[SENSe:]FUNCtion:OFF:ALL`, `[SENSe:]FUNCtion:CONCurrent OFF`, `[SENSe:]DATA? <function>{,<function>}`, `[SENSe:]DATA:STATUS? <function>{,<function>}`
+- **Parameters:** `<function>{,<function>}`
+- **State after `*RST`:** Empty list = no values defined.
+- **Invalidates:** `[SENSe:]FUNCtion[:ON]:COUNt?`
+- **Invalidated by:** `[SENSe:]FUNCtion[:ON]:ALL`, `[SENSe:]FUNCtion:OFF:ALL`, `[SENSe:]FUNCtion:CONCurrent OFF`, `[SENSe:]DATA? <function>{,<function>}`, `[SENSe:]DATA:STATUS? <function>{,<function>}`
 
 ```scpi
 FUNC "VOLT","CURR","POW"
@@ -2060,11 +2060,11 @@ FUNC?                -> "VOLT","CURR","POW"
 
 **`[SENSe:]FUNCtion[:ON]:ALL`**
 
-Slår PÅ alle `<sensor_function>`-er som instrumentet kan måle samtidig.
+Switches ON all `<sensor_function>`s the instrument can measure simultaneously.
 
-- **Tilstand etter `*RST`:** –
-- **Ugyldiggjør:** `[SENSe:]FUNCtion[:ON]:COUNt?`
-- **Ugyldiggjøres av:** `[SENSe:]FUNCtion[:ON]`
+- **State after `*RST`:** –
+- **Invalidates:** `[SENSe:]FUNCtion[:ON]:COUNt?`
+- **Invalidated by:** `[SENSe:]FUNCtion[:ON]`
 
 ```scpi
 FUNC:ALL
@@ -2072,12 +2072,12 @@ FUNC:ALL
 
 **`[SENSe:]FUNCtion[:ON]:COUNt?`**
 
-Spørringen returnerer antall `<sensor_function>`-er som er PÅ.
+The query returns the number of `<sensor_function>`s that are ON.
 
-- **Respons:** `<count>` – antall midlede målinger som for øyeblikket er konfigurert.
-- **Tilstand etter `*RST`:** `0`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** `[SENSe:]FUNCtion[:ON]`, `[SENSe:]FUNCtion[:OFF]`, `[SENSe:]DATA? <function>{,<function>}`, `[SENSe:]DATA:STATUS? <function>{,<function>}`, `[SENSe:]FUNCtion:CONCurrent OFF`
+- **Response:** `<count>` – the number of averaged measurements currently configured.
+- **State after `*RST`:** `0`
+- **Invalidates:** –
+- **Invalidated by:** `[SENSe:]FUNCtion[:ON]`, `[SENSe:]FUNCtion[:OFF]`, `[SENSe:]DATA? <function>{,<function>}`, `[SENSe:]DATA:STATUS? <function>{,<function>}`, `[SENSe:]FUNCtion:CONCurrent OFF`
 
 ```scpi
 FUNC:COUN?           -> 3
@@ -2085,11 +2085,11 @@ FUNC:COUN?           -> 3
 
 **`[SENSe:]FUNCtion:OFF:ALL`**
 
-Slår AV alle `<sensor_function>`-er som instrumentet kan måle samtidig.
+Switches OFF all `<sensor_function>`s the instrument can measure simultaneously.
 
-- **Tilstand etter `*RST`:** –
-- **Ugyldiggjør:** `[SENSe:]FUNCtion[:ON]:COUNt?`
-- **Ugyldiggjøres av:** `[SENSe:]FUNCtion[:ON]`
+- **State after `*RST`:** –
+- **Invalidates:** `[SENSe:]FUNCtion[:ON]:COUNt?`
+- **Invalidated by:** `[SENSe:]FUNCtion[:ON]`
 
 ```scpi
 FUNC:OFF:ALL
@@ -2097,31 +2097,31 @@ FUNC:OFF:ALL
 
 **`[SENSe:]FUNCtion:CONCurrent ON | OFF`**
 
-`CONCurrent`-kommandoen angir om SENSor-blokken skal konfigureres til å måle én funksjon om gangen, eller mer enn én funksjon om gangen (samtidig).
+The `CONCurrent` command states whether the SENSor block is to be configured to measure one function at a time, or more than one function at a time (concurrently).
 
-- **Parametre:**
-  - `ON` – Funksjonen(e) angitt som parametre til `FUNCtion[:ON]`-kommandoen slås på, mens tilstanden til andre funksjoner settes til av.
-  - `OFF` – `FUNCtion[:ON]`-kommandoen fungerer som en «én-av-n»-bryter som velger den angitte funksjonen som den eneste målte funksjonen.
-- **Tilstand etter `*RST`:** `ON`
-- **Ugyldiggjør:** `[SENSe:]FUNCtion[:ON]:COUNt?`, `[SENSe:]FUNCtion[:ON]`
-- **Ugyldiggjøres av:** –
+- **Parameters:**
+  - `ON` – The function(s) given as parameters to the `FUNCtion[:ON]` command are switched on, while the state of other functions is set to off.
+  - `OFF` – The `FUNCtion[:ON]` command acts as a "one-of-n" switch that selects the given function as the only measured function.
+- **State after `*RST`:** `ON`
+- **Invalidates:** `[SENSe:]FUNCtion[:ON]:COUNt?`, `[SENSe:]FUNCtion[:ON]`
+- **Invalidated by:** –
 
 ```scpi
 FUNC:CONC ON
 FUNC:CONC?           -> 1
 ```
 
-#### Dataspørring
+#### Data query
 
 **`[SENSe:]DATA? [<function,function...>]`**
 
-Returnerer data i formatet definert av FORMat-kommandoene. Uten argumenter: antall returnerte verdier er lik antall argumenter til kommandoen `SENSe:FUNCtion[:ON]`. Hvis `SENSe:FUNCtion:CONCurrent` er `OFF`, kan bare én funksjon/måling konfigureres og returneres. Hvis den er `ON`, kan flere funksjoner konfigureres og spørres etter måleresultater.
+Returns data in the format defined by the FORMat commands. Without arguments: the number of values returned equals the number of arguments to the `SENSe:FUNCtion[:ON]` command. If `SENSe:FUNCtion:CONCurrent` is `OFF`, only one function/measurement can be configured and returned. If it is `ON`, several functions can be configured and queried for measurement results.
 
-- **Parametre:** `[<function>,<function>,...]`
-- **Respons:** `<measurement_value>[,<measurement_value>,…]`
-- **Tilstand etter `*RST`:** Tom liste = ingen verdier definert.
-- **Ugyldiggjør:** `[SENSe:]FUNCtion[:ON]:COUNt?`, `[SENSe:]FUNCtion[:ON]`
-- **Ugyldiggjøres av:** –
+- **Parameters:** `[<function>,<function>,...]`
+- **Response:** `<measurement_value>[,<measurement_value>,…]`
+- **State after `*RST`:** Empty list = no values defined.
+- **Invalidates:** `[SENSe:]FUNCtion[:ON]:COUNt?`, `[SENSe:]FUNCtion[:ON]`
+- **Invalidated by:** –
 
 ```scpi
 DATA? "VOLT","CURR","POW"
@@ -2130,48 +2130,48 @@ DATA? "VOLT","CURR","POW"
 
 **`[SENSe:]DATA:STATus? [<function,function...>]`**
 
-Returnerer midlede måling(er) etterfulgt av statusinformasjon for målingen. Statusinformasjonen angir gyldigheten av målingen og legges til etter settet med måleverdier. Antall statusverdier er likt antall returnerte måleverdier. Formatet på statusinformasjonen styres av `FORMat:STATus`-kommandoene.
+Returns the averaged measurement(s) followed by status information for the measurement. The status information states the validity of the measurement and is appended after the set of measurement values. The number of status values equals the number of measurement values returned. The format of the status information is controlled by the `FORMat:STATus` commands.
 
-- **Parametre:** `[<function>,<function>,...]` – se `SENSe:FUNCtion` for detaljert beskrivelse av tilgjengelige funksjoner.
+- **Parameters:** `[<function>,<function>,...]` – see `SENSe:FUNCtion` for a detailed description of the available functions.
 
-**Statusverdier:** De returnerte statusverdiene er heltall og legges til på slutten av måleresultatene. Statusverdien er en bitmaske og kan være en kombinasjon av én eller flere av følgende verdier (biter) kombinert med logisk OR. For eksempel representerer verdien 3 både underrange- og overrange-tilstand.
+**Status values:** The status values returned are integers and are appended at the end of the measurement results. The status value is a bitmask and may be a combination of one or more of the following values (bits) combined with a logical OR. For example, the value 3 represents both an underrange and an overrange condition.
 
-| Verdi | Navn | Betydning |
+| Value | Name | Meaning |
 |---|---|---|
-| 0 | Normal | Gyldig måling, ingen tvilsom tilstand. |
-| 1 | Underrange | Den returnerte verdien er gyldig, men signalamplituden er for lav for det gitte området, slik at målepresisjonen er redusert. |
-| 2 | Overrange | Instrumentet returnerer en måleverdi, men inngangssignalets amplitude er for høy for det gitte området og klippes til en amplitude innenfor gjeldende område. Den returnerte verdien kan ligge mer eller mindre utenfor spesifikasjonen. |
-| 8 | Undefined | Instrumentet klarte ikke å beregne en gyldig verdi. Dette kan f.eks. skyldes tap av synkronisering (ingen gyldig frekvens, harmoniske, ...). Instrumentet returnerer Not A Number for målingen. |
-| 16 | Not available | Den forespurte funksjonen er ikke, eller ikke lenger, tilgjengelig (f.eks. opsjon ikke installert, funksjon slått av). Instrumentet returnerer Not A Number for målingen. |
-| 128 | Power Factor capacitive | For Power Factor-funksjonen angir dette kapasitiv faseforskjell mellom spenning og strøm (0 = induktiv). |
+| 0 | Normal | Valid measurement, no questionable condition. |
+| 1 | Underrange | The value returned is valid, but the signal amplitude is too low for the given range, so measurement precision is reduced. |
+| 2 | Overrange | The instrument returns a measurement value, but the input signal amplitude is too high for the given range and is clipped to an amplitude within the current range. The value returned may be more or less outside the specification. |
+| 8 | Undefined | The instrument could not compute a valid value. This may be caused, for example, by loss of synchronization (no valid frequency, harmonics, ...). The instrument returns Not A Number for the measurement. |
+| 16 | Not available | The requested function is not, or no longer, available (e.g. option not installed, function switched off). The instrument returns Not A Number for the measurement. |
+| 128 | Power Factor capacitive | For the Power Factor function, this indicates a capacitive phase difference between voltage and current (0 = inductive). |
 
-- **Respons:** `<measurement_value1>[,<measurement_value2>,…],<measurement_status1>,[<measurement_status2>,…]`
-- **Tilstand etter `*RST`:** Tom liste = ingen verdier definert.
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Response:** `<measurement_value1>[,<measurement_value2>,…],<measurement_status1>,[<measurement_status2>,…]`
+- **State after `*RST`:** Empty list = no values defined.
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 DATA:STATUS? "VOLT","CURR","POW"
 -> 221.56,1.056,230.65,0,0,0
 ```
 
-#### Minneopptak (Memory Recording)
+#### Memory recording
 
-Kommandoene som konfigurerer minneopptak bruker obligatoriske suffikser 1 og 2 etter SWEep-noden:
+The commands that configure memory recording use mandatory suffixes 1 and 2 after the SWEep node:
 
-- `[:SENSe]:SWEep1` – Konfigurerer minneopptak av samplede verdier (REALtime).
-- `[:SENSe]:SWEep2` – Konfigurerer minneopptak av midlede verdier (AVERage).
+- `[:SENSe]:SWEep1` – Configures memory recording of sampled values (REALtime).
+- `[:SENSe]:SWEep2` – Configures memory recording of averaged values (AVERage).
 
-Innstillingene for minneopptak av midlede og samplede verdier deler samme konfigurasjonsområde, og alle innstillinger må settes på nytt når man bytter fra opptak av midlede til samplede verdier eller omvendt. Kommandoen `[SENSe:]SWEep1|2[:STATe] OFF` tilbakestiller innstillingene til standardverdier, bortsett fra triggere.
+The settings for memory recording of averaged and sampled values share the same configuration area, and all settings must be set again when switching from recording averaged to sampled values or vice versa. The command `[SENSe:]SWEep1|2[:STATe] OFF` resets the settings to their default values, except for triggers.
 
 **`[SENSe:]SWEep1|2:TIME <value> | MAX`**
 
-Angir maksimal lengde på minneopptaket i sekunder. Opptakslengden inkluderer pretrigger. Hvis synkronisering er på, er maksimal opptaksvarighet for SWEep2 direkte avhengig av det eksakte antallet midlingsintervaller som vil bli tatt opp, beregnet som angitt opptakslengde / nominelt midlingsintervall.
+Sets the maximum length of the memory recording in seconds. The recording length includes the pretrigger. If synchronization is on, the maximum recording duration for SWEep2 depends directly on the exact number of averaging intervals that will be recorded, computed as the recording length given / nominal averaging interval.
 
-- **Parametre:** `<value> | MAX`
-- **Tilstand etter `*RST`:** `MAX`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:** `<value> | MAX`
+- **State after `*RST`:** `MAX`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SWE1:TIME 1.0
@@ -2180,12 +2180,12 @@ SWE1:TIME?           -> 1.0
 
 **`[SENSe:]SWEep1|2:TIME:MAX?`**
 
-Returnerer maksimal opptakstid i sekunder i henhold til gjeldende innstillinger for minneopptak (total mengde tilgjengelig minne, sett av variabler som skal tas opp, samplingsfaktor og instrumentets samplingsfrekvens).
+Returns the maximum recording time in seconds according to the current memory recording settings (total amount of available memory, set of variables to be recorded, sample factor and the instrument's sampling frequency).
 
-- **Respons:** `<time>`
-- **Tilstand etter `*RST`:** Maksimal opptakstid i henhold til `*RST`-innstillingene for minneopptak.
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Response:** `<time>`
+- **State after `*RST`:** The maximum recording time according to the `*RST` settings for memory recording.
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SWE1:TIME:MAX?
@@ -2193,19 +2193,19 @@ SWE1:TIME:MAX?
 
 **`[SENSe:]SWEep1|2:POINTS?`**
 
-Før opptaket er startet eller fullført, returnerer denne kommandoen maks. antall punkter per funksjon som vil bli tatt opp. For synkroniserte SWEep2-opptak (AVERage) beregnes verdien som:
+Before the recording has been started or completed, this command returns the max. number of points per function that will be recorded. For synchronized SWEep2 recordings (AVERage) the value is computed as:
 
 ```
-Konfigurert opptakstid / nominelt midlingsintervall / samplingsfaktor
+Configured recording time / nominal averaging interval / sample factor
 ( SWEep2:TIME? / APER? / SWEep2:SFACtor? )
 ```
 
-Det faktiske maks. antall punkter som blir tatt opp, avhenger av variasjonene i frekvensen til det målte signalet. Når opptaket er fullført, returnerer kommandoen faktisk antall registrerte punkter per funksjon.
+The actual max. number of points recorded depends on the variations in the frequency of the measured signal. Once the recording is complete, the command returns the actual number of points recorded per function.
 
-- **Respons:** `<count>`
-- **Tilstand etter `*RST`:** Maksimalt tilgjengelig antall punkter. Avhenger av mengden tilgjengelig minne i instrumentet.
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Response:** `<count>`
+- **State after `*RST`:** The maximum available number of points. Depends on the amount of memory available in the instrument.
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SWE1:POINTS?
@@ -2213,12 +2213,12 @@ SWE1:POINTS?
 
 **`[SENSe:]SWEep1|2:OFFSet:TIME <value> | MAX`**
 
-Angir pretriggerlengden i sekunder.
+Sets the pretrigger length in seconds.
 
-- **Parametre:** `<value> | MAX`. Pretriggerlengden må være større enn eller lik null og mindre enn opptakslengden angitt med `[SENSe:]SWEep1|2:TIME`.
-- **Tilstand etter `*RST`:** `0.0`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:** `<value> | MAX`. The pretrigger length must be greater than or equal to zero and less than the recording length set with `[SENSe:]SWEep1|2:TIME`.
+- **State after `*RST`:** `0.0`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SWE1:OFFS:TIME 1.0
@@ -2226,20 +2226,20 @@ SWE1:OFFS:TIME 1.0
 
 **`[SENSe:]SWEep1|2:OFFSet:POINTS?`**
 
-Før opptaket er startet eller fullført, returnerer denne kommandoen maks. antall punkter per funksjon som vil bli tatt opp i pretriggeren. For synkroniserte SWEep2-opptak (AVERage) beregnes verdien som:
+Before the recording has been started or completed, this command returns the max. number of points per function that will be recorded in the pretrigger. For synchronized SWEep2 recordings (AVERage) the value is computed as:
 
 ```
-Konfigurert pretriggertid / nominelt midlingsintervall / samplingsfaktor
+Configured pretrigger time / nominal averaging interval / sample factor
 ( SWEep2:OFFSet:TIME? / APER? / SWEep2:SFACtor? )
 ```
 
-Det faktiske maks. antall punkter som blir tatt opp i pretriggeren, avhenger av variasjonene i frekvensen til det målte signalet. Når opptaket er fullført, returnerer kommandoen faktisk antall punkter per funksjon som ble tatt opp i pretriggeren.
+The actual max. number of points recorded in the pretrigger depends on the variations in the frequency of the measured signal. Once the recording is complete, the command returns the actual number of points per function recorded in the pretrigger.
 
-- **Parametre:** –
-- **Respons:** `<count>`
-- **Tilstand etter `*RST`:** `0`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:** –
+- **Response:** `<count>`
+- **State after `*RST`:** `0`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SWE1:OFFS:POINTS?    -> 0
@@ -2247,14 +2247,14 @@ SWE1:OFFS:POINTS?    -> 0
 
 **`[SENSe:]SWEep1|2[:STATe] ON | OFF`**
 
-Aktiverer/deaktiverer minneopptak av samplede/midlede verdier. Bare én av sweepene kan være aktivert om gangen. Forsøk på å aktivere begge sweepene genererer feilen `-221 Settings conflict`, dvs. SWEep1-opptak (REALtime) og SWEep2-opptak (AVERage) kan ikke kjøre samtidig. Overgang fra OFF til ON tømmer minnet som om `TRACe:DELete:ALL` var utført. Overgang fra ON til OFF tilbakestiller alle innstillinger relatert til minneopptak, bortsett fra triggere.
+Enables/disables memory recording of sampled/averaged values. Only one of the sweeps can be enabled at a time. Attempting to enable both sweeps generates the error `-221 Settings conflict`, i.e. SWEep1 recording (REALtime) and SWEep2 recording (AVERage) cannot run at the same time. A transition from OFF to ON clears the memory as if `TRACe:DELete:ALL` had been executed. A transition from ON to OFF resets all settings related to memory recording, except for triggers.
 
-- **Parametre:**
-  - `ON` – Aktiverer minneopptak.
-  - `OFF` – Deaktiverer minneopptak.
-- **Tilstand etter `*RST`:** `OFF`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:**
+  - `ON` – Enables memory recording.
+  - `OFF` – Disables memory recording.
+- **State after `*RST`:** `OFF`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SWE1 ON
@@ -2263,12 +2263,12 @@ SWE1?                -> 1
 
 **`[SENSe:]SWEep1|2:COUNt <count>`**
 
-Antall blokker som skal registreres.
+The number of blocks to be recorded.
 
-- **Parametre:** `1 to 65535` (foreløpig er bare 1 gyldig).
-- **Tilstand etter `*RST`:** `1`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:** `1 to 65535` (currently only 1 is valid).
+- **State after `*RST`:** `1`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SWE1:COUN 1
@@ -2277,12 +2277,12 @@ SWE1:COUN?           -> 1
 
 **`[SENSe:]SWEep1|2:SFACtor <value>`**
 
-Setter samplingsfaktoren (sample factor). Den angir at hver n-te verdi produsert av `[SENSe:]SWEep1|2`-blokken lagres i minnet. Hvis den angitte samplingsfaktoren ville gi en tid mellom to lagrede sampler som er større enn `SENSe:SWEep1|2:TIME` eller `SENSe:SWEep1|2:OFFSet:TIME`, genereres feilen `-221 Settings conflict`.
+Sets the sample factor. It states that every nth value produced by the `[SENSe:]SWEep1|2` block is stored in memory. If the sample factor given would produce a time between two stored samples greater than `SENSe:SWEep1|2:TIME` or `SENSe:SWEep1|2:OFFSet:TIME`, the error `-221 Settings conflict` is generated.
 
-- **Parametre:** `1 to 65535`. Når samplingsfaktoren er satt til 1, lagres alle sampler.
-- **Tilstand etter `*RST`:** `1`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:** `1 to 65535`. When the sample factor is set to 1, all samples are stored.
+- **State after `*RST`:** `1`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SWE1:SFAC 1
@@ -2290,116 +2290,116 @@ SWE1:SFAC 1
 
 **`[SENSe:]SWEep1|2:FUNCtion <function>{,<function>}`**
 
-Angir funksjonslisten for minneopptak. Maksimalt antall funksjoner er 20. Hvis listen overskrider enhetens kapasitet, økes samplingsfaktoren automatisk.
+Sets the function list for memory recording. The maximum number of functions is 20. If the list exceeds the unit's capacity, the sample factor is increased automatically.
 
-For SWEep1-funksjonslisten (REALtime) kan bare samplede verdier angis. For SWEep2-funksjonslisten (AVERage) kan alle funksjoner fra instrumentets standard funksjonsliste angis.
+For the SWEep1 function list (REALtime) only sampled values can be given. For the SWEep2 function list (AVERage) all functions from the instrument's standard function list can be given.
 
-Funksjonslisten lagres i en lagret konfigurasjon og lastes inn igjen ved PowerOn eller med `*RCL`.
+The function list is stored in a saved configuration and is loaded again at PowerOn or with `*RCL`.
 
-- **Parametre:** `<function>`
-  - Gyldige funksjoner for SWEep1 (REALtime):
+- **Parameters:** `<function>`
+  - Valid functions for SWEep1 (REALtime):
     - `VOLTage1..6[:DC]`
     - `CURRent1..6[:DC]`
     - `POWer1..6[:ACTive]`
     - `TORQue[1..4]`
     - `SPEed[1..4]`
     - `POWer[1..4]:MECHanical`
-  - Gyldige funksjoner for SWEep2 (AVERage): alle funksjoner fra instrumentets standard funksjonsliste.
-- **Tilstand etter `*RST`:** `"VOLTage1"`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+  - Valid functions for SWEep2 (AVERage): all functions from the instrument's standard function list.
+- **State after `*RST`:** `"VOLTage1"`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SWE1:FUNC "VOLT1","VOLT2","VOLT3"
 ```
 
-### SENSe2-subsystemet (krever opsjonen Process Interface)
+### The SENSe2 subsystem (requires the Process Interface option)
 
-> **Merk:** Hele SENSe2-subsystemet gjelder kun instrumenter med opsjonen **Process Interface** installert.
+> **Note:** The whole SENSe2 subsystem applies only to instruments with the **Process Interface** option installed.
 
-SENSe2-subsystemet styrer innstillingene for inngangene på den valgfrie Process Interface-opsjonen. Numeriske suffikser på nodene `TORQue|SPEed|POLepairs|TYPe|REFerence` tilsvarer indeksen til de 4 motorene/generatorene som støttes. Kanalene i INPut-subsystemet kombineres til drivverksindeks (drive index) i `SENSe2:xxx`-subsystemet som vist i tabellen nedenfor.
+The SENSe2 subsystem controls the settings for the inputs of the optional Process Interface. Numeric suffixes on the `TORQue|SPEed|POLepairs|TYPe|REFerence` nodes correspond to the index of the 4 supported motors/generators. The channels of the INPut subsystem are combined into a drive index in the `SENSe2:xxx` subsystem as shown in the table below.
 
-| Inngangskanal (suffiks)                   | Drivverksindeks | Suffiks i SENSe2-subsystemet |
-|-------------------------------------------|-----------------|------------------------------|
-| INPut21 (moment), INPut25 (turtall)        | 1 | `SENSe2:TORQue|SPEed|POLepairs|TYPe|REFerence1[:POWer]` |
-| INPut22 (moment), INPut26 (turtall)        | 2 | `SENSe2:TORQue|SPEed|POLepairs|TYPe|REFerence2[:POWer]` |
-| INPut23 (moment), INPut27 (turtall)        | 3 | `SENSe2:TORQue|SPEed|POLepairs|TYPe|REFerence3[:POWer]` |
-| INPut24 (moment), INPut28 (turtall)        | 4 | `SENSe2:TORQue|SPEed|POLepairs|TYPe|REFerence4[:POWer]` |
+| Input channel (suffix)                    | Drive index | Suffix in the SENSe2 subsystem |
+|-------------------------------------------|-------------|--------------------------------|
+| INPut21 (torque), INPut25 (speed)          | 1 | `SENSe2:TORQue|SPEed|POLepairs|TYPe|REFerence1[:POWer]` |
+| INPut22 (torque), INPut26 (speed)          | 2 | `SENSe2:TORQue|SPEed|POLepairs|TYPe|REFerence2[:POWer]` |
+| INPut23 (torque), INPut27 (speed)          | 3 | `SENSe2:TORQue|SPEed|POLepairs|TYPe|REFerence3[:POWer]` |
+| INPut24 (torque), INPut28 (speed)          | 4 | `SENSe2:TORQue|SPEed|POLepairs|TYPe|REFerence4[:POWer]` |
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
 | `:INPut[21..28]` | | | |
 | `  :TYPe` | VOLTage \| FREQuency | FREQuency | Analog/digital sensor |
 
 **`INPut[21..28]:TYPe VOLTage | FREQuency`**
 
-Velger signaltypen som måles på en Process Interface-inngang.
+Selects the type of signal measured on a Process Interface input.
 
-- **Parametre:**
-  - `VOLTage` – Inngangssignalet er spenning.
-  - `FREQuency` – Inngangssignalet er frekvens.
-- **Tilstand etter `*RST`:** `FREQuency` for alle Process Interface-innganger.
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:**
+  - `VOLTage` – The input signal is a voltage.
+  - `FREQuency` – The input signal is a frequency.
+- **State after `*RST`:** `FREQuency` for all Process Interface inputs.
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 INP21:TYP VOLT
 INP25:TYP?           -> FREQ
 ```
 
-SENSe2-noden skiller det mekaniske systemet fra det elektriske (SENSe1 for det elektriske systemet er standardnoden på rotnivået i kommandotreet). `SENSe2:xxx:VOLTage`-nodene gjelder når tilhørende inngangstype er satt til `INPutx:TYPe VOLTage`, og `SENSe2:xxx:FREQuency`-nodene gjelder når tilhørende inngangstype er satt til `INPutx:TYPe FREQuency`.
+The SENSe2 node separates the mechanical system from the electrical one (SENSe1, for the electrical system, is the default node at the root level of the command tree). The `SENSe2:xxx:VOLTage` nodes apply when the corresponding input type is set to `INPutx:TYPe VOLTage`, and the `SENSe2:xxx:FREQuency` nodes apply when the corresponding input type is set to `INPutx:TYPe FREQuency`.
 
-#### Kommandooversikt – moment (TORQue)
+#### Command overview – torque (TORQue)
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
 | `:SENSe2` | | | |
 | `  :TORQue[1..4]` | | | |
 | `    :VOLTage` | | | |
-| `      :SCALe` | -1e6 to 1e6 | 1 [Nm/V] | Analog momentsensor |
+| `      :SCALe` | -1e6 to 1e6 | 1 [Nm/V] | Analog torque sensor |
 | `      :OFFSet` | | | |
-| `        [:VALue]` | -1e6 to 1e6 | 0 [V] | Inngangsspenning for 0 [Nm] |
-| `        :IMMediate` | | | Sett offset fra inngangsverdi; ingen spørring |
+| `        [:VALue]` | -1e6 to 1e6 | 0 [V] | Input voltage for 0 [Nm] |
+| `        :IMMediate` | | | Set offset from input value; no query |
 | `    :FREQuency` | | | |
-| `      :SCALe` | -1e6 to 1e6 | [Nm/Hz] | Digital momentsensor |
+| `      :SCALe` | -1e6 to 1e6 | [Nm/Hz] | Digital torque sensor |
 | `      :OFFSet` | | | |
-| `        [:VALue]` | -1e6 to 1e6 | 10000 [Hz] | Inngangsfrekvens for 0 [Nm] |
-| `        :IMMediate` | | | Sett offset fra inngangsverdi; ingen spørring |
+| `        [:VALue]` | -1e6 to 1e6 | 10000 [Hz] | Input frequency for 0 [Nm] |
+| `        :IMMediate` | | | Set offset from input value; no query |
 
-#### Kommandooversikt – turtall (SPEed) og drivverk
+#### Command overview – speed (SPEed) and drive
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
 | `:SENSe2` | | | |
 | `  :SPEed[1..4]` | | | |
 | `    :VOLTage` | | | |
 | `      :SCALe` | | | |
-| `        [:DEFault]` | -1e6 to 1e6 | 1 [rpm/V] | Analog turtallssensor |
+| `        [:DEFault]` | -1e6 to 1e6 | 1 [rpm/V] | Analog speed sensor |
 | `      :OFFSet` | | | |
-| `        [:VALue]` | -1e6 to 1e6 | 0 [V] | Inngangsspenning for 0 [rpm] |
-| `        :IMMediate` | | | Sett offset fra inngangsverdi; ingen spørring |
+| `        [:VALue]` | -1e6 to 1e6 | 0 [V] | Input voltage for 0 [rpm] |
+| `        :IMMediate` | | | Set offset from input value; no query |
 | `    :FREQuency` | | | |
 | `      :SCALe` | | | |
-| `        [:DEFault]` | -1e6 to 1e6 | 60 [rpm/Hz] | Digital turtallssensor |
-| `        :PULSe` | 1 to 100000 | 1 [pul/rev] | Alternativ innstilling |
+| `        [:DEFault]` | -1e6 to 1e6 | 60 [rpm/Hz] | Digital speed sensor |
+| `        :PULSe` | 1 to 100000 | 1 [pul/rev] | Alternative setting |
 | `      :OFFSet` | | | |
-| `        [:VALue]` | -1e6 to 1e6 | 0 [Hz] | Inngangsfrekvens for 0 [rpm] |
-| `        :IMMediate` | | | Sett offset fra inngangsverdi; ingen spørring |
+| `        [:VALue]` | -1e6 to 1e6 | 0 [Hz] | Input frequency for 0 [rpm] |
+| `        :IMMediate` | | | Set offset from input value; no query |
 | `  :TYPe[1..4]` | MOTor \| GENerator | MOTor | |
 | `  :POLepairs[1..4]` | 1 to 999 | 1 | |
 | `  :REFerence[1..4]` | | | |
-| `    [:POWer]` | "POWer[1..6][:ACTive]" | "POWer" | For virkningsgradsberegning |
+| `    [:POWer]` | "POWer[1..6][:ACTive]" | "POWer" | For efficiency computation |
 
-#### Skalering – moment og turtall
+#### Scaling – torque and speed
 
 **`SENSe2:TORQue[1..4]:VOLTage:SCALe <value>`**
 
-Setter momentskaleringsfaktoren for inngang av spenningstype, som gjenspeiler omsetningsforholdet til momentsensorene som benyttes. Differansen mellom spenningen på den aktuelle inngangen og den angitte offsetverdien multipliseres med denne skaleringsfaktoren før all videre behandling.
+Sets the torque scaling factor for a voltage-type input, reflecting the transformation ratio of the torque sensors used. The difference between the voltage at the input in question and the offset value given is multiplied by this scaling factor before all further processing.
 
-- **Parametre:** `-1.0e6 to 1.0e6` [Nm/V]
-- **Tilstand etter `*RST`:** `1.0`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:** `-1.0e6 to 1.0e6` [Nm/V]
+- **State after `*RST`:** `1.0`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SENS2:TORQ3:VOLT:SCAL 10.0
@@ -2408,12 +2408,12 @@ SENS2:TORQ1:VOLT:SCAL?   -> 25.0
 
 **`SENSe2:TORQue[1..4]:VOLTage:OFFSet[:VALue] <value>`**
 
-Setter inngangsspenningen som tilsvarer moment lik null. Denne spenningen trekkes fra den målte spenningen på inngangen før differansen multipliseres med skaleringsfaktoren.
+Sets the input voltage corresponding to zero torque. This voltage is subtracted from the voltage measured at the input before the difference is multiplied by the scaling factor.
 
-- **Parametre:** `-1.0e6 to 1.0e6` [V]
-- **Tilstand etter `*RST`:** `0.0`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** `SENSe2:TORQue[1..4]:VOLTage:OFFSet:IMMediate`
+- **Parameters:** `-1.0e6 to 1.0e6` [V]
+- **State after `*RST`:** `0.0`
+- **Invalidates:** –
+- **Invalidated by:** `SENSe2:TORQue[1..4]:VOLTage:OFFSet:IMMediate`
 
 ```scpi
 SENS2:TORQ3:VOLT:OFFS 0.0
@@ -2422,12 +2422,12 @@ SENS2:TORQ2:VOLT:OFFS?   -> 0.0
 
 **`SENSe2:TORQue[1..4]:VOLTage:OFFSet:IMMediate`**
 
-Setter offsetverdien til den momentspenningen som måles i øyeblikket. Målingen må være gyldig (ingen overlast).
+Sets the offset value to the torque voltage currently being measured. The measurement must be valid (no overload).
 
-- **Parametre:** –
-- **Tilstand etter `*RST`:** –
-- **Ugyldiggjør:** `SENSe2:TORQue[1..4]:VOLTage:OFFSet`
-- **Ugyldiggjøres av:** –
+- **Parameters:** –
+- **State after `*RST`:** –
+- **Invalidates:** `SENSe2:TORQue[1..4]:VOLTage:OFFSet`
+- **Invalidated by:** –
 
 ```scpi
 SENS2:TORQ3:VOLT:OFFS:IMM
@@ -2435,12 +2435,12 @@ SENS2:TORQ3:VOLT:OFFS:IMM
 
 **`SENSe2:TORQue[1..4]:FREQuency:SCALe <value>`**
 
-Setter momentskaleringsfaktoren for inngang av frekvenstype, som gjenspeiler omsetningsforholdet til momentsensorene som benyttes. Differansen mellom frekvensen på den aktuelle inngangen og den angitte offsetverdien multipliseres med denne skaleringsfaktoren før all videre behandling.
+Sets the torque scaling factor for a frequency-type input, reflecting the transformation ratio of the torque sensors used. The difference between the frequency at the input in question and the offset value given is multiplied by this scaling factor before all further processing.
 
-- **Parametre:** `-1.0e6 to 1.0e6` [rpm/Hz] *(slik enheten er oppgitt i manualen; kommandooversikten angir [Nm/Hz] for momentskala)*
-- **Tilstand etter `*RST`:** `1.0`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:** `-1.0e6 to 1.0e6` [rpm/Hz] *(the unit as given in the manual; the command overview states [Nm/Hz] for the torque scale)*
+- **State after `*RST`:** `1.0`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SENS2:TORQ2:FREQ:SCAL 0.001
@@ -2449,12 +2449,12 @@ SENS2:TORQ1:FREQ:SCAL?   -> 0.001
 
 **`SENSe2:TORQue[1..4]:FREQuency:OFFSet[:VALue] <value>`**
 
-Setter inngangsfrekvensen som tilsvarer moment lik null. Denne frekvensen trekkes fra den målte frekvensen på inngangen før differansen multipliseres med skaleringsfaktoren.
+Sets the input frequency corresponding to zero torque. This frequency is subtracted from the frequency measured at the input before the difference is multiplied by the scaling factor.
 
-- **Parametre:** `-1.0e6 to 1.0e6` [Hz]
-- **Tilstand etter `*RST`:** `0.0`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** `SENSe2:TORQue[1..4]:FREQuency:OFFSet:IMMediate`
+- **Parameters:** `-1.0e6 to 1.0e6` [Hz]
+- **State after `*RST`:** `0.0`
+- **Invalidates:** –
+- **Invalidated by:** `SENSe2:TORQue[1..4]:FREQuency:OFFSet:IMMediate`
 
 ```scpi
 SENS2:TORQ3:FREQ:OFFS 1000.0
@@ -2463,12 +2463,12 @@ SENS2:TORQ2:FREQ:OFFS?   -> 1000.0
 
 **`SENSe2:TORQue[1..4]:FREQuency:OFFSet:IMMediate`**
 
-Setter offsetverdien for momentfrekvens fra den verdien som måles i øyeblikket. Målingen må være gyldig (ingen overlast / udefinert verdi).
+Sets the torque frequency offset value from the value currently being measured. The measurement must be valid (no overload / undefined value).
 
-- **Parametre:** –
-- **Tilstand etter `*RST`:** –
-- **Ugyldiggjør:** `SENSe2:TORQue[1..4]:FREQuency:OFFSet`
-- **Ugyldiggjøres av:** –
+- **Parameters:** –
+- **State after `*RST`:** –
+- **Invalidates:** `SENSe2:TORQue[1..4]:FREQuency:OFFSet`
+- **Invalidated by:** –
 
 ```scpi
 SENS2:TORQ3:FREQ:OFFS:IMM
@@ -2476,12 +2476,12 @@ SENS2:TORQ3:FREQ:OFFS:IMM
 
 **`SENSe2:SPEed[1..4]:VOLTage:SCALe[:DEFault] <value>`**
 
-Setter turtallsskaleringsfaktoren for inngang av spenningstype, som gjenspeiler omsetningsforholdet til turtallssensorene som benyttes. Differansen mellom spenningen på den aktuelle inngangen og den angitte offsetverdien multipliseres med denne skaleringsfaktoren før all videre behandling.
+Sets the speed scaling factor for a voltage-type input, reflecting the transformation ratio of the speed sensors used. The difference between the voltage at the input in question and the offset value given is multiplied by this scaling factor before all further processing.
 
-- **Parametre:** `-1.0e6 to 1.0e6` [Nm/V] *(slik enheten er oppgitt i manualen; kommandooversikten angir [rpm/V] for turtallsskala)*
-- **Tilstand etter `*RST`:** `1.0`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:** `-1.0e6 to 1.0e6` [Nm/V] *(the unit as given in the manual; the command overview states [rpm/V] for the speed scale)*
+- **State after `*RST`:** `1.0`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SENS2:SPE3:VOLT:SCAL 10.0
@@ -2490,12 +2490,12 @@ SENS2:SPE1:VOLT:SCAL?    -> 25.0
 
 **`SENSe2:SPEed[1..4]:VOLTage:OFFSet[:VALue] <value>`**
 
-Setter inngangsspenningen som tilsvarer turtall lik null. Denne spenningen trekkes fra den målte spenningen på inngangen før differansen multipliseres med skaleringsfaktoren.
+Sets the input voltage corresponding to zero speed. This voltage is subtracted from the voltage measured at the input before the difference is multiplied by the scaling factor.
 
-- **Parametre:** `-1.0e6 to 1.0e6` [V]
-- **Tilstand etter `*RST`:** `0.0`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** `SENSe2:SPEed[1..4]:VOLTage:OFFSet:IMMediate`
+- **Parameters:** `-1.0e6 to 1.0e6` [V]
+- **State after `*RST`:** `0.0`
+- **Invalidates:** –
+- **Invalidated by:** `SENSe2:SPEed[1..4]:VOLTage:OFFSet:IMMediate`
 
 ```scpi
 SENS2:SPE3:VOLT:OFFS 0.0
@@ -2504,12 +2504,12 @@ SENS2:SPE2:VOLT:OFFS?    -> 0.0
 
 **`SENSe2:SPEed[1..4]:VOLTage:OFFSet:IMMediate`**
 
-Setter offsetverdien til den turtallsspenningen som måles i øyeblikket. Målingen må være gyldig (ingen overlast).
+Sets the offset value to the speed voltage currently being measured. The measurement must be valid (no overload).
 
-- **Parametre:** –
-- **Tilstand etter `*RST`:** –
-- **Ugyldiggjør:** `SENSe2:SPEed[1..4]:VOLTage:OFFSet[:VALue]`
-- **Ugyldiggjøres av:** –
+- **Parameters:** –
+- **State after `*RST`:** –
+- **Invalidates:** `SENSe2:SPEed[1..4]:VOLTage:OFFSet[:VALue]`
+- **Invalidated by:** –
 
 ```scpi
 SENS2:SPEed3:VOLT:OFFS:IMM
@@ -2517,12 +2517,12 @@ SENS2:SPEed3:VOLT:OFFS:IMM
 
 **`SENSe2:SPEed[1..4]:FREQuency:SCALe[:DEFault] <value>`**
 
-Setter turtallsskaleringsfaktoren for inngang av frekvenstype, som gjenspeiler omsetningsforholdet til turtallssensorene som benyttes. Differansen mellom frekvensen på den aktuelle inngangen og den angitte offsetverdien multipliseres med denne skaleringsfaktoren før all videre behandling.
+Sets the speed scaling factor for a frequency-type input, reflecting the transformation ratio of the speed sensors used. The difference between the frequency at the input in question and the offset value given is multiplied by this scaling factor before all further processing.
 
-- **Parametre:** `-1.0e6 to 1.0e6` [rpm/Hz]
-- **Tilstand etter `*RST`:** `1.0`
-- **Ugyldiggjør:** `SENSe2:SPEed[1..4]:FREQuency:SCALe:PULS`
-- **Ugyldiggjøres av:** `SENSe2:SPEed[1..4]:FREQuency:SCALe:PULS`
+- **Parameters:** `-1.0e6 to 1.0e6` [rpm/Hz]
+- **State after `*RST`:** `1.0`
+- **Invalidates:** `SENSe2:SPEed[1..4]:FREQuency:SCALe:PULS`
+- **Invalidated by:** `SENSe2:SPEed[1..4]:FREQuency:SCALe:PULS`
 
 ```scpi
 SENS2:SPE2:FREQ:SCAL 0.001
@@ -2531,12 +2531,12 @@ SENS2:SPE1:FREQ:SCAL?    -> 0.001
 
 **`SENSe2:SPEed[1..4]:FREQuency:SCALe:PULSe <value>`**
 
-Setter turtallsskaleringsfaktoren for inngang av frekvenstype, som gjenspeiler omsetningsforholdet til turtallssensorene som benyttes. Denne alternative metoden gjør det mulig å sende spesifikasjonen til en digital turtallssensor direkte til enheten. Tilhørende offsetverdi bør settes til null.
+Sets the speed scaling factor for a frequency-type input, reflecting the transformation ratio of the speed sensors used. This alternative method makes it possible to pass the specification of a digital speed sensor directly to the unit. The corresponding offset value should be set to zero.
 
-- **Parametre:** `1 to 100000` [pulses/revolution]
-- **Tilstand etter `*RST`:** `1`
-- **Ugyldiggjør:** `SENSe2:SPEed[1..4]:FREQuency:SCALe[:DEFault]`
-- **Ugyldiggjøres av:** `SENSe2:SPEed[1..4]:FREQuency:SCALe[:DEFault]`
+- **Parameters:** `1 to 100000` [pulses/revolution]
+- **State after `*RST`:** `1`
+- **Invalidates:** `SENSe2:SPEed[1..4]:FREQuency:SCALe[:DEFault]`
+- **Invalidated by:** `SENSe2:SPEed[1..4]:FREQuency:SCALe[:DEFault]`
 
 ```scpi
 SENS2:SPE2:FREQ:SCAL:PULS 1024
@@ -2545,12 +2545,12 @@ SENS2:SPE1:FREQ:SCAL:PULS?   -> 256
 
 **`SENSe2:SPEed[1..4]:FREQuency:OFFSet[:VALue] <value>`**
 
-Setter inngangsfrekvensen som tilsvarer turtall lik null. Denne frekvensen trekkes fra den målte frekvensen på inngangen før differansen multipliseres med skaleringsfaktoren.
+Sets the input frequency corresponding to zero speed. This frequency is subtracted from the frequency measured at the input before the difference is multiplied by the scaling factor.
 
-- **Parametre:** `-1.0e6 to 1.0e6` [Hz]
-- **Tilstand etter `*RST`:** `0.0`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** `SENSe2:SPEed[1..4]:FREQuency:OFFSet:IMMediate`
+- **Parameters:** `-1.0e6 to 1.0e6` [Hz]
+- **State after `*RST`:** `0.0`
+- **Invalidates:** –
+- **Invalidated by:** `SENSe2:SPEed[1..4]:FREQuency:OFFSet:IMMediate`
 
 ```scpi
 SENS2:SPE3:FREQ:OFFS 1000.0
@@ -2559,30 +2559,30 @@ SENS2:SPE2:FREQ:OFFS?    -> 1000.0
 
 **`SENSe2:SPEed[1..4]:FREQuency:OFFSet:IMMediate`**
 
-Setter offsetverdien for turtallsfrekvens fra den verdien som måles i øyeblikket. Målingen må være gyldig (ingen overlast / udefinert verdi).
+Sets the speed frequency offset value from the value currently being measured. The measurement must be valid (no overload / undefined value).
 
-- **Tilstand etter `*RST`:** –
-- **Ugyldiggjør:** `SENSe2:SPEed[1..4]:FREQuency:OFFSet[:VALue]`
-- **Ugyldiggjøres av:** –
+- **State after `*RST`:** –
+- **Invalidates:** `SENSe2:SPEed[1..4]:FREQuency:OFFSet[:VALue]`
+- **Invalidated by:** –
 
 ```scpi
 SENS2:TORQ3:FREQ:OFFS:IMM
 ```
 
-*(Eksempelet er gjengitt slik det står i manualen.)*
+*(The example is reproduced as it stands in the manual.)*
 
-#### Drivverksinnstillinger (Drive Settings)
+#### Drive settings
 
 **`SENSe2:TYPe[1..4] MOTor | GENerator`**
 
-Setter typen drivverk som brukes. Innstillingen påvirker beregningen av sakking (slip) og virkningsgrad.
+Sets the type of drive used. The setting affects the computation of slip and efficiency.
 
-- **Parametre:**
-  - `MOTor` – Drivverkstype satt til motor.
-  - `GENerator` – Drivverkstype satt til generator.
-- **Tilstand etter `*RST`:** `MOT`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:**
+  - `MOTor` – Drive type set to motor.
+  - `GENerator` – Drive type set to generator.
+- **State after `*RST`:** `MOT`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SENS2:TYP1 MOT
@@ -2591,12 +2591,12 @@ SENS2:TYP3?          -> GEN
 
 **`SENSe2:POLepairs[1..4] <value>`**
 
-Angir antall polpar for drivverket. Innstillingen brukes til beregning av sakking (slip).
+Sets the number of pole pairs for the drive. The setting is used for the computation of slip.
 
-- **Parametre:** `<value>`, gyldig område: `1 to 999`
-- **Tilstand etter `*RST`:** `1`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:** `<value>`, valid range: `1 to 999`
+- **State after `*RST`:** `1`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SENS2:POL3 2
@@ -2605,50 +2605,50 @@ SENS2:POL1?          -> 1
 
 **`SENSe2:REFerence[1..4][:POWer] <function>`**
 
-Angir hvilken målt elektrisk effekt som brukes til virkningsgradsberegning.
+Sets which measured electrical power is used for the efficiency computation.
 
-- **Parametre:** `<function>` kan være hvilken som helst av de midlede aktive effektene som instrumentet måler: `"POWer[1..6|460][:ACTive]"`
-- **Tilstand etter `*RST`:** `"POW"`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:** `<function>` may be any of the averaged active powers the instrument measures: `"POWer[1..6|460][:ACTive]"`
+- **State after `*RST`:** `"POW"`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SENS2:REF3 "POW1"
 SENS2:REF2?          -> "POW"
 ```
 
-### SOURce-subsystemet (krever opsjonen Process Interface)
+### The SOURce subsystem (requires the Process Interface option)
 
-> **Merk:** Hele SOURce-subsystemet gjelder kun instrumenter med opsjonen **Process Interface** installert.
+> **Note:** The whole SOURce subsystem applies only to instruments with the **Process Interface** option installed.
 
-SOURce-subsystemet styrer innstillingene for de analoge utgangene på den valgfrie Process Interface-opsjonen. Numeriske suffikser på VOLTage-noden tilsvarer indeksen til de 4 utgangene som støttes.
+The SOURce subsystem controls the settings for the analog outputs of the optional Process Interface. Numeric suffixes on the VOLTage node correspond to the index of the 4 supported outputs.
 
-#### Kommandooversikt (SOURce)
+#### Command overview (SOURce)
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
 | `:SOURce` | | | |
 | `  :VOLTage[1..4]` | | | |
 | `    [:LEVel]` | | | |
 | `      [:IMMediate]` | | | |
-| `        [:AMPLitude]` | -10.3 to 10.3 | 0.0 V | Kun for FIXed-modus |
+| `        [:AMPLitude]` | -10.3 to 10.3 | 0.0 V | FIXed mode only |
 | `    :MODE` | FIXed \| VARiable | FIXed | |
-| `    :FEED` | \<function\> | VOLTage1 | Kun for VARiable-modus |
+| `    :FEED` | \<function\> | VOLTage1 | VARiable mode only |
 | `    :GAIN` | -1.0e6 to 1.0e6 | 1.0 V/Ref unit | |
 | `    :ZERO` | -1.0e6 to 1.0e6 | 0.0 Ref unit | |
 
-#### Utgangskonfigurasjon
+#### Output configuration
 
 **`SOURce:VOLTage[1..4]:MODE FIXed | VARiable`**
 
-Velger driftsmodus for de analoge utgangene.
+Selects the operating mode for the analog outputs.
 
-- **Parametre:**
-  - `FIXed` – Utgangsspenningen angis direkte med kommandoen `SOURce:VOLTage[1..4][:LEVel][:IMMediate][:AMPLitude]`.
-  - `VARiable` – Etter hver måling beregnes utgangsspenningen fra målefunksjonen valgt med FEED, ved hjelp av de angitte GAIN- og ZERO-verdiene.
-- **Tilstand etter `*RST`:** `FIXed`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:**
+  - `FIXed` – The output voltage is set directly with the command `SOURce:VOLTage[1..4][:LEVel][:IMMediate][:AMPLitude]`.
+  - `VARiable` – After each measurement, the output voltage is computed from the measurement function selected with FEED, using the GAIN and ZERO values given.
+- **State after `*RST`:** `FIXed`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SOUR:VOLT3:MODE VAR
@@ -2657,12 +2657,12 @@ SOUR:VOLT2:MODE?     -> FIX
 
 **`SOURce:VOLTage[1..4][:LEVel][:IMMediate][:AMPLitude] <value>`**
 
-Velger utgangsspenningen for FIXed-modus.
+Selects the output voltage for FIXed mode.
 
-- **Parametre:** `<value>`, gyldig område: `-10.3 to 10.3 V`
-- **Tilstand etter `*RST`:** `0.0`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:** `<value>`, valid range: `-10.3 to 10.3 V`
+- **State after `*RST`:** `0.0`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SOUR:VOLT4 5.3
@@ -2671,28 +2671,28 @@ SOUR:VOLT1?          -> -2.5
 
 **`SOURce:VOLTage[1..4]:FEED <function>`**
 
-Angir referansefunksjonen for utgangen i VARiable-modus.
+Sets the reference function for the output in VARiable mode.
 
-- **Parametre:** `<function>` – enhver gyldig midlet målefunksjon i instrumentet.
-- **Tilstand etter `*RST`:** `"VOLTage1"`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:** `<function>` – any valid averaged measurement function in the instrument.
+- **State after `*RST`:** `"VOLTage1"`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SOUR:VOLT2:FEED "POW2:APP"
 SOUR:VOLT4:FEED?     -> "CURR3:MEAN"
 ```
 
-#### Skalering av utganger
+#### Output scaling
 
 **`SOURce:VOLTage[1..4]:GAIN <value>`**
 
-Angir skaleringen for utgangen. Differansen mellom den aktuelle verdien av referansefunksjonen og ZERO-verdien multipliseres med denne faktoren for å beregne utgangsspenningen.
+Sets the scaling for the output. The difference between the current value of the reference function and the ZERO value is multiplied by this factor to compute the output voltage.
 
-- **Parametre:** `<gain>`, gyldig område: `-1.0e6 to 1.0e6 V/Ref unit`
-- **Tilstand etter `*RST`:** `1.0`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:** `<gain>`, valid range: `-1.0e6 to 1.0e6 V/Ref unit`
+- **State after `*RST`:** `1.0`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SOUR:VOLT2:GAIN 5.0
@@ -2701,390 +2701,390 @@ SOUR:VOLT3:GAIN?     -> 1.0e-3
 
 **`SOURce:VOLTage[1..4]:ZERO <value>`**
 
-Angir offset for utgangen. Denne verdien trekkes fra den aktuelle verdien av referansefunksjonen før differansen multipliseres med GAIN-innstillingen for å beregne utgangsspenningen.
+Sets the offset for the output. This value is subtracted from the current value of the reference function before the difference is multiplied by the GAIN setting to compute the output voltage.
 
-- **Parametre:** `<value>`, gyldig område: `-1.0e6 to 1.0e6 Ref unit`
-- **Tilstand etter `*RST`:** `0.0`
-- **Ugyldiggjør:** –
-- **Ugyldiggjøres av:** –
+- **Parameters:** `<value>`, valid range: `-1.0e6 to 1.0e6 Ref unit`
+- **State after `*RST`:** `0.0`
+- **Invalidates:** –
+- **Invalidated by:** –
 
 ```scpi
 SOUR:VOLT1:ZERO 225.0
 SOUR:VOLT3:ZERO?     -> 50.0
 ```
 
-## Subsystemer: SYNC til STATus
+## Subsystems: SYNC through STATus
 
-### SYNC-subsystemet
+### The SYNC subsystem
 
-SYNC-subsystemet styrer instrumentets synkroniseringsevne. Når synkronisering er aktivert, tilpasser instrumentet midlingssyklusene til frekvensen på signalet som mates til synkroniseringskilden. Hvis minneopptak av samplede data pågår, kan synkroniseringssignalet brukes som en spesiell form for triggering.
+The SYNC subsystem controls the instrument's synchronization capability. When synchronization is enabled, the instrument adapts the averaging cycles to the frequency of the signal fed to the synchronization source. If memory recording of sampled data is in progress, the synchronization signal can be used as a special form of triggering.
 
-#### Kommandooversikt (SYNC)
+#### Command overview (SYNC)
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
 | `SYNC:STATe` | ON \| OFF | ON | |
 | `SYNC:LEVel:UNIT` | ABSolute \| PCT | PCT | |
-| `SYNC[:SOURce]\|VOLTage[1..6]\|CURRent[1..6]` | VOLTage[1..6] \| CURRent[1..6] \| EXTernal | VOLTage1 | SOURce = gjeldende sync-kilde. \<foreløpig er kun SOURce-noden implementert\> |
-| `SYNC...:LEVel` | -150 %...150 % av området | 0.0 | Ikke for EXTernal |
+| `SYNC[:SOURce]\|VOLTage[1..6]\|CURRent[1..6]` | VOLTage[1..6] \| CURRent[1..6] \| EXTernal | VOLTage1 | SOURce = the current sync source. \<currently only the SOURce node is implemented\> |
+| `SYNC...:LEVel` | -150 %...150 % of range | 0.0 | Not for EXTernal |
 | `SYNC...:SLOPe` | POSitive \| NEGative | POSitive | |
-| `SYNC...:FILTer[:LPASs][:STATe]` | ON \| OFF | OFF | Ikke for EXTernal-kilde |
-| `SYNC...:FILTer[:LPASs]:FREQuency` | 1.0e2, 1.0e3, 1.0e4 | 1.0e4 Hz | Ikke for EXTernal-kilde |
-| `SYNC:TIMeout` | 0.015 til 3600.0 | 0.3 s | |
+| `SYNC...:FILTer[:LPASs][:STATe]` | ON \| OFF | OFF | Not for the EXTernal source |
+| `SYNC...:FILTer[:LPASs]:FREQuency` | 1.0e2, 1.0e3, 1.0e4 | 1.0e4 Hz | Not for the EXTernal source |
+| `SYNC:TIMeout` | 0.015 to 3600.0 | 0.3 s | |
 
 #### `SYNC:STATe ON | OFF`
 
-**Beskrivelse:** Angir om midlingsintervallet skal styres av signalfrekvensen på valgt inngang eller ikke. Hvis synkronisering er slått på, holdes den faktiske midlingsperioden til det første heltallsmultiplum av sync-signalet som er større enn brukerangitt nominell midlingsperiode. Hvis synkronisering er slått av, er den faktiske midlingsperioden lik den brukerangitte nominelle midlingsperioden avrundet til et heltallsmultiplum av sampleperioder.
+**Description:** States whether the averaging interval is to be controlled by the signal frequency on the selected input or not. If synchronization is switched on, the actual averaging period is held to the first integer multiple of the sync signal that is greater than the user-specified nominal averaging period. If synchronization is switched off, the actual averaging period equals the user-specified nominal averaging period rounded to an integer multiple of sample periods.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| ON | Synkronisering kreves. Instrumentet vil alltid forsøke å synkronisere til frekvensen på sync-kildesignalet. |
-| OFF | Synkronisering er deaktivert. Bruk dette alternativet for målinger på DC-signaler. |
+| ON | Synchronization is required. The instrument will always try to synchronize to the frequency of the sync source signal. |
+| OFF | Synchronization is disabled. Use this option for measurements on DC signals. |
 
-**Eksempel:**
+**Example:**
 
 ```
 SYNC:STAT ON
-SYNC:STAT?          Respons: 1
+SYNC:STAT?          Response: 1
 ```
 
-- **\*RST-tilstand:** ON
+- **\*RST state:** ON
 
 #### `SYNC:LEVel:UNIT ABSolute | PCT`
 
-**Beskrivelse:** Setter enheten for kommandoen `SYNC[:SOURce]|VOLTage[1..6]|CURRent[1..6]:LEVel`.
+**Description:** Sets the unit for the command `SYNC[:SOURce]|VOLTage[1..6]|CURRent[1..6]:LEVel`.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| ABSolute | Nivå angis i absolutte enheter. |
-| PCT | Nivå angis i prosent av nominelt inngangsområde. |
+| ABSolute | The level is given in absolute units. |
+| PCT | The level is given as a percentage of the nominal input range. |
 
-**Eksempel:**
+**Example:**
 
 ```
 SYNC:LEV:UNIT ABS
-SYNC:LEVel:UNIT?    Respons: PCT
+SYNC:LEVel:UNIT?    Response: PCT
 ```
 
-- **\*RST-tilstand:** PCT
-- **Invaliderer:** `SYNC:LEVel:UNIT`
+- **\*RST state:** PCT
+- **Invalidates:** `SYNC:LEVel:UNIT`
 
 #### `SYNC[:SOURce] VOLTage[1..6] | CURRent[1..6] | EXTernal`
 
-**Beskrivelse:** Velger signalkilden for synkronisering og frekvensmåling.
+**Description:** Selects the signal source for synchronization and frequency measurement.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| VOLTage[1..6] | En av spenningskanalene er sync-kilde. |
-| CURRent[1..6] | En av strømkanalene er sync-kilde. |
-| EXTernal | Ekstern TTL-sync-inngang er sync-kilde. |
+| VOLTage[1..6] | One of the voltage channels is the sync source. |
+| CURRent[1..6] | One of the current channels is the sync source. |
+| EXTernal | The external TTL sync input is the sync source. |
 
-**Eksempel:**
+**Example:**
 
 ```
 SYNC:SOUR VOLT1
-SYNC:SOUR?          Respons: VOLT1
+SYNC:SOUR?          Response: VOLT1
 ```
 
-- **\*RST-tilstand:** VOLTage1
-- **Invaliderer:** `SYNC[:SOUR]:AUTO`
-- **Invalideres av:** `SYNC[:SOUR]:AUTO`
+- **\*RST state:** VOLTage1
+- **Invalidates:** `SYNC[:SOUR]:AUTO`
+- **Invalidated by:** `SYNC[:SOUR]:AUTO`
 
 #### `SYNC[:SOURce]|VOLTage[1..6]|CURRent[1..6]:LEVel <level>`
 
-**Beskrivelse:** Setter sync-nivået der perioden til valgt inngangssignal måles av instrumentets synkroniseringskretser. `SYNC:SOURce:LEVel` setter sync-nivået til den aktive triggerkilden (ikke for EXTernal). \<foreløpig er kun SOURce-noden implementert\>
+**Description:** Sets the sync level at which the period of the selected input signal is measured by the instrument's synchronization circuits. `SYNC:SOURce:LEVel` sets the sync level of the active trigger source (not for EXTernal). \<currently only the SOURce node is implemented\>
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `<level>` | Gyldig område: -150 % til 150 % av nominelt inngangsområde på angitt kanal, i IEEE 488.2 \<NON-DECIMAL NUMERIC PROGRAM DATA\>-format. Enheten velges med kommandoen `SYNC:LEVel:UNIT`. |
+| `<level>` | Valid range: -150 % to 150 % of the nominal input range on the specified channel, in IEEE 488.2 \<NON-DECIMAL NUMERIC PROGRAM DATA\> format. The unit is selected with the `SYNC:LEVel:UNIT` command. |
 
-**Eksempel:**
+**Example:**
 
 ```
 SYNC:VOLT1:LEV 10.0
-SYNC:VOLT1:LEV?     Respons: 0.0
+SYNC:VOLT1:LEV?     Response: 0.0
 ```
 
-- **\*RST-tilstand:** 0.0
-- **Invaliderer:** `SYNC[:SOURce]:VOLTage[1..6]|CURRent[1..6]:LEVel:AUTO`
-- **Invalideres av:** `SYNC[:SOURce]:VOLTage[1..6]|CURRent[1..6]:LEVel:AUTO`, `[SENSe:]VOLTage[1..6]|CURRent[1..6]:AC[:|DC]:RANGe[:UPPer]`, `INPut[1|2|3|4|5|6|7|8|9|10|11|12]:SHUNt`, `INPut[1|2|3|4|5|6|7|8|9|10|11|12]:GAIN`, `SYNC:LEVel:UNIT`
+- **\*RST state:** 0.0
+- **Invalidates:** `SYNC[:SOURce]:VOLTage[1..6]|CURRent[1..6]:LEVel:AUTO`
+- **Invalidated by:** `SYNC[:SOURce]:VOLTage[1..6]|CURRent[1..6]:LEVel:AUTO`, `[SENSe:]VOLTage[1..6]|CURRent[1..6]:AC[:|DC]:RANGe[:UPPer]`, `INPut[1|2|3|4|5|6|7|8|9|10|11|12]:SHUNt`, `INPut[1|2|3|4|5|6|7|8|9|10|11|12]:GAIN`, `SYNC:LEVel:UNIT`
 
 #### `SYNC[:SOURce]|VOLTage[1..6]|CURRent[1..6]:SLOPe POSitive | NEGative`
 
-**Beskrivelse:** Setter den aktive flanken for synkroniseringssignalet. \<foreløpig er kun SOURce-noden implementert\>
+**Description:** Sets the active edge for the synchronization signal. \<currently only the SOURce node is implemented\>
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| POSitive | Instrumentet synkroniserer på positiv flanke av synkroniseringssignalet. |
-| NEGative | Instrumentet synkroniserer på negativ flanke av synkroniseringssignalet. |
+| POSitive | The instrument synchronizes on the positive edge of the synchronization signal. |
+| NEGative | The instrument synchronizes on the negative edge of the synchronization signal. |
 
-**Eksempel:**
+**Example:**
 
 ```
 SYNC:SLOP POS
-SYNC:SLOP?          Respons: POS
+SYNC:SLOP?          Response: POS
 ```
 
-- **\*RST-tilstand:** POSitive
+- **\*RST state:** POSitive
 
 #### `SYNC[:SOURce]|VOLTage[1..6]|CURRent[1..6]:FILTer:[LPASs[:STATe]] ON | OFF`
 
-**Beskrivelse:** Styrer filteret for synkroniseringssignalet. Filtreringen brukes på signalet på inngangskanalen som er valgt som synkroniseringskilde. Denne kommandoen har ingen effekt hvis valgt sync-kilde er EXTernal. \<foreløpig er kun SOURce-noden implementert\>
+**Description:** Controls the filter for the synchronization signal. The filtering is applied to the signal on the input channel selected as the synchronization source. This command has no effect if the selected sync source is EXTernal. \<currently only the SOURce node is implemented\>
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| ON | Filter er PÅ. |
-| OFF | Filter er AV. |
+| ON | Filter is ON. |
+| OFF | Filter is OFF. |
 
-**Eksempel:**
+**Example:**
 
 ```
 SYNC:FILT ON
-SYNC:FILT?          Respons: 0
+SYNC:FILT?          Response: 0
 ```
 
-- **\*RST-tilstand:** OFF
+- **\*RST state:** OFF
 
 #### `SYNC[:SOURce]|VOLTage[1..6]|CURRent[1..6]:FILTer:[LPASs]:FREQuency 10.0e3 | 1.0e3 | 100.0`
 
-**Beskrivelse:** Setter lavpassfrekvensen for synkroniseringssignalfilteret. Denne kommandoen har ingen effekt hvis valgt sync-kilde er EXTernal. Frekvensenheten er Hz. \<foreløpig er kun SOURce-noden implementert\>
+**Description:** Sets the low-pass frequency for the synchronization signal filter. This command has no effect if the selected sync source is EXTernal. The frequency unit is Hz. \<currently only the SOURce node is implemented\>
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
 | 10.0e3 | 10 kHz |
 | 1.0e3 | 1 kHz |
 | 100.0 | 100 Hz |
 
-Enhver annen verdi mellom 100 Hz og 10 kHz tvinges (coerces) til nærmeste høyere eksakte verdi.
+Any other value between 100 Hz and 10 kHz is coerced to the nearest higher exact value.
 
-**Eksempel:**
+**Example:**
 
 ```
 SYNC:FILT:FREQ 100.0
-SYNC:FILT:FREQ?     Respons: 1000.0
+SYNC:FILT:FREQ?     Response: 1000.0
 ```
 
-- **\*RST-tilstand:** 10000.0
+- **\*RST state:** 10000.0
 
 #### `SYNC:TIMeout <timeout>`
 
-**Beskrivelse:** Setter synkroniseringstimeout i sekunder. Instrumentet starter midling etter timeout hvis ikke noe sync-signal er tilgjengelig. Timeout er kun aktiv når synkronisering er på. Hvis det nominelle midlingsintervallet endres med kommandoen `[SENSe:]{CURRent[1..6]|VOLTage[1..6]|[POWer]}:{AC|[DC]}:APERture[:TIME]`, settes synkroniseringstimeouten til det nominelle midlingsintervallet eller 0.3 sekunder, avhengig av hva som er størst.
+**Description:** Sets the synchronization timeout in seconds. The instrument starts averaging after the timeout if no sync signal is available. The timeout is only active when synchronization is on. If the nominal averaging interval is changed with the command `[SENSe:]{CURRent[1..6]|VOLTage[1..6]|[POWer]}:{AC|[DC]}:APERture[:TIME]`, the synchronization timeout is set to the nominal averaging interval or 0.3 seconds, whichever is greater.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `<timeout>` | 0.015 til 3600 s |
+| `<timeout>` | 0.015 to 3600 s |
 
-**Eksempel:**
+**Example:**
 
 ```
 SYNC:TIMeout 5.0
-SYNC:TIMeout?       Respons: 5.0
+SYNC:TIMeout?       Response: 5.0
 ```
 
-- **\*RST-tilstand:** 0.3
-- **Invalideres av:** `[SENSe:]{CURRent[1..6]|VOLTage[1..6]|[POWer]}:{AC|[DC]}:APERture[:TIME]`
+- **\*RST state:** 0.3
+- **Invalidated by:** `[SENSe:]{CURRent[1..6]|VOLTage[1..6]|[POWer]}:{AC|[DC]}:APERture[:TIME]`
 
-### TIMer-subsystemet
+### The TIMer subsystem
 
-TIMer-subsystemet inneholder kommandoer for å styre instrumentets interne timer. Denne timeren gir tidsstemplingsinformasjon for midlede målinger.
+The TIMer subsystem contains commands for controlling the instrument's internal timer. This timer provides timestamp information for averaged measurements.
 
-#### Kommandooversikt (TIMer)
+#### Command overview (TIMer)
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
-| `TIMer:RESet` | | - | Ingen spørring |
-| `TIMer:RESet:AUTO` | ON \| OFF | ON | \<foreløpig ikke implementert\> |
-| `TIMer:RESet:TIME?` | | | Kun spørring |
+| `TIMer:RESet` | | - | No query |
+| `TIMer:RESet:AUTO` | ON \| OFF | ON | \<not yet implemented\> |
+| `TIMer:RESet:TIME?` | | | Query only |
 
 #### `TIMer:RESet`
 
-**Beskrivelse:** Nullstiller instrumentets interne timer. Timeren brukes til å måle minneopptakstid og antall midlingssykluser. Ved nullstilling settes både timerens tid og telleren for midlingssykluser til null. Absolutt tid for siste timer-nullstilling kan hentes med kommandoen `TIMer:RESet:TIME?`. Hvis denne kommandoen sendes mens midlede verdier lagres i minnet, blir tidsinformasjonen inkonsistent, siden timeren begynner å telle fra null midt i dataene.
+**Description:** Resets the instrument's internal timer. The timer is used to measure memory recording time and the number of averaging cycles. On reset, both the timer's time and the averaging cycle counter are set to zero. The absolute time of the last timer reset can be read with the command `TIMer:RESet:TIME?`. If this command is sent while averaged values are being stored in memory, the time information becomes inconsistent, since the timer starts counting from zero in the middle of the data.
 
-Timeren nullstilles automatisk ved oppstart (Power On) — `TIMer:RESet:TIME?` gir da oppstartstidspunktet.
+The timer is reset automatically at Power On — `TIMer:RESet:TIME?` then gives the power-on time.
 
-**Eksempel:**
+**Example:**
 
 ```
 TIM:RES
 ```
 
-- **\*RST-tilstand:** Ingen nullstillingsbetingelse
-- **Invaliderer:** `TIM:RES:TIME?`
+- **\*RST state:** No reset condition
+- **Invalidates:** `TIM:RES:TIME?`
 
 #### `TIMer:RESet:AUTO ON | OFF`
 
-**Beskrivelse:** Styrer om instrumentets interne timer nullstilles automatisk ved ARMing. For å beholde absolutt tidsbase for sekvenserte minnemålinger må `TIMer:RESet:AUTO` settes til OFF, slik at påfølgende `INITiate[:IMMediate]:NAME:STARt`-kommandoer ikke nullstiller timeren. \<foreløpig ikke implementert\>
+**Description:** Controls whether the instrument's internal timer is reset automatically on ARMing. To retain an absolute time base for sequenced memory measurements, `TIMer:RESet:AUTO` must be set to OFF, so that subsequent `INITiate[:IMMediate]:NAME:STARt` commands do not reset the timer. \<not yet implemented\>
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| ON | `INITiate[:IMMediate]:NAME:STARt` nullstiller timeren. |
-| OFF | `INITiate[:IMMediate]:NAME:STARt` nullstiller ikke timeren. |
+| ON | `INITiate[:IMMediate]:NAME:STARt` resets the timer. |
+| OFF | `INITiate[:IMMediate]:NAME:STARt` does not reset the timer. |
 
-**Eksempel:**
+**Example:**
 
 ```
 TIM:RES:AUTO ON
-TIM:RES:AUTO?       Respons: 1
+TIM:RES:AUTO?       Response: 1
 ```
 
-- **\*RST-tilstand:** ON
-- **Invaliderer:** `TIM:RESet:TIME?`
+- **\*RST state:** ON
+- **Invalidates:** `TIM:RESet:TIME?`
 
 #### `TIMer:RESet:TIME?`
 
-**Beskrivelse:** Spør etter absolutt tid for siste timer-nullstilling.
+**Description:** Queries the absolute time of the last timer reset.
 
-**Respons:**
+**Response:**
 
 ```
 <year>,<month>,<day>,<hours>,<minutes>,<seconds>
 ```
 
-Året er i firesifret numerisk format. Timer er i 24-timers notasjon.
+The year is in four-digit numeric format. Hours are in 24-hour notation.
 
-**Eksempel:**
+**Example:**
 
 ```
 TIM:RES:TIME?
 ```
 
-- **\*RST-tilstand:** Har ingen nullstillingsverdi
+- **\*RST state:** Has no reset value
 
-### TRACe-subsystemet
+### The TRACe subsystem
 
-TRACe-subsystemet inneholder kommandoer for å lese minneopptak.
+The TRACe subsystem contains commands for reading memory recordings.
 
-#### Kommandooversikt (TRACe)
+#### Command overview (TRACe)
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
-| `TRACe[:DATA]:PREamble?` | block | Kun spørring |
-| `TRACe[:DATA]?` | \<block\>, \<number_of_points\>, \<offset\>, \<sparsing\> | Kun spørring |
-| `TRACe[:DATA]:STATus?` | \<block\>, \<number_of_points\>, \<offset\>, \<sparsing\> | Kun spørring |
-| `TRACe:FREE?` | | Kun spørring |
-| `TRACe:CATalog:LENgth?` | | Kun spørring |
+| `TRACe[:DATA]:PREamble?` | block | Query only |
+| `TRACe[:DATA]?` | \<block\>, \<number_of_points\>, \<offset\>, \<sparsing\> | Query only |
+| `TRACe[:DATA]:STATus?` | \<block\>, \<number_of_points\>, \<offset\>, \<sparsing\> | Query only |
+| `TRACe:FREE?` | | Query only |
+| `TRACe:CATalog:LENgth?` | | Query only |
 | `TRACe:DELete:ALL` | | |
 
 #### `TRACe[:DATA]:PREamble? [<block>]`
 
-**Beskrivelse:** Leser dataheaderen for gitt blokk. Hvis `<block>`-parameteren utelates, sendes alle headere.
+**Description:** Reads the data header for the given block. If the `<block>` parameter is omitted, all headers are sent.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `<block>` = 1 | Denne valgfrie parameteren angir hvilken blokk i minnet preamblen skal returneres for. Foreløpig kan kun én blokk tas opp, og eneste gyldige verdi er 1. |
+| `<block>` = 1 | This optional parameter states which block in memory the preamble is to be returned for. Currently only one block can be recorded, and the only valid value is 1. |
 
-**Respons:**
+**Response:**
 
-| Felt | Type | Betydning |
+| Field | Type | Meaning |
 |---|---|---|
-| `<points_per_func>` | heltall | Angir mengden data tatt opp for hver funksjon. |
-| `<num_of_func>` | heltall | Antall funksjoner konfigurert for minneopptak. |
-| `<trigger_index>` | heltall | Indeks for datapunktet som svarer til trigger. |
-| `<first_point_time_relative_to_trigger>` | flyttall | Tidsdifferansen mellom første registrerte datapunkt og trigger, i sekunder. |
-| `<record_duration>` | flyttall | Angir tidsdifferansen mellom første og siste registrerte datapunkt, i sekunder. |
-| `<trigger_time_relative_to_timer_reset_time>` | flyttall | Angir lengden på tidsintervallet mellom timer-nullstilling og trigger, i sekunder. Triggertiden som denne verdien er avledet fra, svarer til TIME:RELative-funksjonsverdien til datapunktet som kommer rett før dataene ved indeks `<trigger_index>` (TIME:RELative-verdiene er tidsstempler for når tilhørende midlingsintervaller ble fullført). |
-| `<average_time_between_two_points>` | flyttall | Angir sampleintervall i sekunder. For SWEep1 (REALtime)-opptak og ikke-synkroniserte SWEep2 (AVERage)-opptak er denne verdien det eksakte sampleintervallet. For synkroniserte SWEep2 (AVERage)-opptak er verdien et gjennomsnittlig sampleintervall beregnet som `<record_duration> / <points_per_func>`. Det faktiske intervallet mellom enkeltstående påfølgende samples avhenger av variasjonene i frekvensen til det målte signalet. |
+| `<points_per_func>` | integer | States the amount of data recorded for each function. |
+| `<num_of_func>` | integer | The number of functions configured for memory recording. |
+| `<trigger_index>` | integer | Index of the data point corresponding to the trigger. |
+| `<first_point_time_relative_to_trigger>` | float | The time difference between the first recorded data point and the trigger, in seconds. |
+| `<record_duration>` | float | States the time difference between the first and last recorded data point, in seconds. |
+| `<trigger_time_relative_to_timer_reset_time>` | float | States the length of the time interval between the timer reset and the trigger, in seconds. The trigger time this value is derived from corresponds to the TIME:RELative function value of the data point immediately preceding the data at index `<trigger_index>` (the TIME:RELative values are timestamps for when the corresponding averaging intervals completed). |
+| `<average_time_between_two_points>` | float | States the sample interval in seconds. For SWEep1 (REALtime) recordings and non-synchronized SWEep2 (AVERage) recordings, this value is the exact sample interval. For synchronized SWEep2 (AVERage) recordings, the value is an average sample interval computed as `<record_duration> / <points_per_func>`. The actual interval between individual consecutive samples depends on the variations in the frequency of the measured signal. |
 
-**Eksempel:**
+**Example:**
 
 ```
 TRAC:DATA:PRE?
-Respons: 0,0,0,0.00000E+00,0.00000E+00,0.00000E+00,0.00000E+00
+Response: 0,0,0,0.00000E+00,0.00000E+00,0.00000E+00,0.00000E+00
 ```
 
-- **\*RST-tilstand:** `0,0,0,0.00000E+00,0.00000E+00,0.00000E+00,0.00000E+00`
+- **\*RST state:** `0,0,0,0.00000E+00,0.00000E+00,0.00000E+00,0.00000E+00`
 
 #### `TRACe[:DATA]? [<block>[,<count>[,<offset>[,<sparsing>]]]]`
 
-**Beskrivelse:** Leser data fra minnet.
+**Description:** Reads data from memory.
 
-Standard dataformat er lesbare ASCii-verdier (`FORMat[:DATA] ASCii, 8`). For bedre ytelse kan du bruke binær utdata med 32-bits brede flyttall (`FORMat[:DATA] REAL,32`) og normal (instrumentets egen) byterekkefølge (`FORMat:BORDer NORMal`).
+The default data format is readable ASCii values (`FORMat[:DATA] ASCii, 8`). For better performance you can use binary output with 32-bit wide floating point numbers (`FORMat[:DATA] REAL,32`) and normal (the instrument's native) byte order (`FORMat:BORDer NORMal`).
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `<block>` | Angir blokken som skal leses. Satt til 0 leses alle blokker. Satt til 1 leses den første innsamlede blokken, osv. |
-| `<count>` | Angir antall punkter som skal leses for angitt blokk, med start ved offset-indeksen. |
-| `<offset>` | Angir indeksen for det innsamlede datapunktet der overføringen skal starte. |
-| `<sparsing>` | Angir at hvert n-te datapunkt overføres. Satt til 1 overføres alle punkter. Satt til 2 overføres annethvert punkt. |
+| `<block>` | States the block to be read. Set to 0, all blocks are read. Set to 1, the first acquired block is read, and so on. |
+| `<count>` | States the number of points to be read for the given block, starting at the offset index. |
+| `<offset>` | States the index of the acquired data point at which the transfer is to start. |
+| `<sparsing>` | States that every nth data point is transferred. Set to 1, all points are transferred. Set to 2, every other point is transferred. |
 
-Hvis ingen parametre angis, overføres alle registrerte data. Parametre kan utelates fra høyre mot venstre.
+If no parameters are given, all recorded data is transferred. Parameters can be omitted from right to left.
 
-Standardverdier: `<block>=1`, `<count>=alle`, `<offset>=0`, `<sparsing>=1`
+Default values: `<block>=1`, `<count>=all`, `<offset>=0`, `<sparsing>=1`
 
-**Respons:**
+**Response:**
 
-Når `FORMat:TRANspose` er ON, grupperes verdiene etter funksjoner:
+When `FORMat:TRANspose` is ON, the values are grouped by function:
 
 ```
 <interval1>,<interval2>,<interval3>,...   <interval1>,<interval2>,<interval3>,...
 —— func1 ——                               —— func2 ——
 ```
 
-Når `FORMat:TRANspose` er OFF, grupperes verdiene etter intervaller:
+When `FORMat:TRANspose` is OFF, the values are grouped by interval:
 
 ```
 <func1>,<func2>,<func3>,...   <func1>,<func2>,<func3>,...
 —— interval1 ——               —— interval2 ——
 ```
 
-**Eksempel:**
+**Example:**
 
 ```
-TRAC:DATA?          Respons: 1.2345E+01,2.3456E+01,....
+TRAC:DATA?          Response: 1.2345E+01,2.3456E+01,....
 ```
 
-- **\*RST-tilstand:** Det er ingen respons på denne kommandoen etter reset.
+- **\*RST state:** There is no response to this command after reset.
 
 #### `TRACe[:DATA]:STATus? [<block>[,<count>[,<offset>[,<sparsing>]]]]`
 
-**Beskrivelse:** Leser data og status fra minnet.
+**Description:** Reads data and status from memory.
 
-Data returneres først, deretter følger statusinformasjonen.
+The data is returned first, followed by the status information.
 
-Målestatusinformasjonen angir gyldigheten til målingen. Statusinformasjonen legges til etter settet med målte verdier. Antall statusverdier er likt antallet returnerte måleverdier. Formatet på statusinformasjonen styres av `FORMat:STATus`-kommandoene.
+The measurement status information states the validity of the measurement. The status information is appended after the set of measured values. The number of status values equals the number of measurement values returned. The format of the status information is controlled by the `FORMat:STATus` commands.
 
-For best ytelse, bruk binær utdata med 32-bits brede flyttall (`FORMat[:DATA] REAL,32`), normal (instrumentets egen) byterekkefølge (`FORMat:BORDer NORMal`) og 8-bits brede heltalls-statusverdier (`FORMat[:DATA]:STATus INT,8`).
+For best performance, use binary output with 32-bit wide floating point numbers (`FORMat[:DATA] REAL,32`), normal (the instrument's native) byte order (`FORMat:BORDer NORMal`) and 8-bit wide integer status values (`FORMat[:DATA]:STATus INT,8`).
 
-**Parametre:** Se `TRACe[:DATA]?`.
+**Parameters:** See `TRACe[:DATA]?`.
 
-**Statusverdier:**
+**Status values:**
 
-De returnerte statusverdiene er heltall. Målestatusverdiene legges til på slutten av måleresultatene. Statusverdien er en bitmaske (heltall) og kan være en kombinasjon av én eller flere av følgende verdier (biter) kombinert med logisk ELLER:
+The status values returned are integers. The measurement status values are appended at the end of the measurement results. The status value is a bitmask (an integer) and may be a combination of one or more of the following values (bits) combined with a logical OR:
 
-| Verdi | Navn | Betydning |
+| Value | Name | Meaning |
 |---|---|---|
-| 0 | Normal | Gyldig måling, ingen tvilsom (questionable) tilstand. |
-| 1 | Underrange | Den returnerte verdien er gyldig, men signalamplituden er for lav for gitt område, slik at målepresisjonen er redusert. |
-| 2 | Overrange | Instrumentet returnerer en måleverdi, men inngangssignalets amplitude er for høy for gitt område. Dette fører til at inngangssignalet klippes til en amplitude innenfor gjeldende område. Fordi måleverdien beregnes fra klippede sampledata, kan den returnerte verdien være mer eller mindre utenfor spesifikasjonen. |
-| 8 | Undefined | Instrumentet klarte ikke å beregne en gyldig verdi. Dette kan f.eks. skyldes tap av synkronisering (ingen gyldig frekvens, harmoniske, ...). Instrumentet returnerer Not A Number for målingen. |
-| 16 | Not available | Den forespurte funksjonen er ikke, eller ikke lenger, tilgjengelig (f.eks. opsjon ikke installert, funksjon slått av). Instrumentet returnerer Not A Number for målingen. |
-| 128 | Power Factor capacitive | For effektfaktor-funksjonen angir dette kapasitiv faseforskjell mellom spenning og strøm (0 = induktiv). |
+| 0 | Normal | Valid measurement, no questionable condition. |
+| 1 | Underrange | The value returned is valid, but the signal amplitude is too low for the given range, so measurement precision is reduced. |
+| 2 | Overrange | The instrument returns a measurement value, but the input signal amplitude is too high for the given range. This causes the input signal to be clipped to an amplitude within the current range. Because the measurement value is computed from clipped sample data, the value returned may be more or less outside the specification. |
+| 8 | Undefined | The instrument could not compute a valid value. This may be caused, for example, by loss of synchronization (no valid frequency, harmonics, ...). The instrument returns Not A Number for the measurement. |
+| 16 | Not available | The requested function is not, or no longer, available (e.g. option not installed, function switched off). The instrument returns Not A Number for the measurement. |
+| 128 | Power Factor capacitive | For the power factor function, this indicates a capacitive phase difference between voltage and current (0 = inductive). |
 
-**Respons:**
+**Response:**
 
-Når `FORMat:TRANspose` er ON, grupperes verdiene etter funksjoner:
+When `FORMat:TRANspose` is ON, the values are grouped by function:
 
 ```
 <interv1>,<interv2>,...  <interv1>,<interv2>,...     <interv1>,<interv2>,...  <interv1>,<interv2>,...
@@ -3092,7 +3092,7 @@ Når `FORMat:TRANspose` er ON, grupperes verdiene etter funksjoner:
 —————————— data ——————————                           —————————— status ——————————
 ```
 
-Når `FORMat:TRANspose` er OFF, grupperes verdiene etter intervaller:
+When `FORMat:TRANspose` is OFF, the values are grouped by interval:
 
 ```
 <func1>,<func2>,...  <func1>,<func2>,...     <func1>,<func2>,...  <func1>,<func2>,...
@@ -3100,70 +3100,69 @@ Når `FORMat:TRANspose` er OFF, grupperes verdiene etter intervaller:
 —————————— data ——————————                   —————————— status ——————————
 ```
 
-**Eksempel:**
+**Example:**
 
 ```
-TRAC:DATA:STAT?     Respons: 1.2345E+01,2.3456E+01,....,0,0,...
+TRAC:DATA:STAT?     Response: 1.2345E+01,2.3456E+01,....,0,0,...
 ```
 
-- **\*RST-tilstand:** Det er ingen respons på denne kommandoen etter reset.
+- **\*RST state:** There is no response to this command after reset.
 
 #### `TRACe:FREE?`
 
-**Beskrivelse:** Returnerer antall ledige byte i minnet.
+**Description:** Returns the number of free bytes in memory.
 
-**Respons:**
+**Response:**
 
 ```
 <bytes>
 ```
 
-**Eksempel:**
+**Example:**
 
 ```
-TRAC:FREE?          Respons: 4194176
+TRAC:FREE?          Response: 4194176
 ```
 
-- **\*RST-tilstand:** Returnerer maksimalt tilgjengelig minne hvis ingen data er tatt opp. Denne verdien er instrumentavhengig.
+- **\*RST state:** Returns the maximum available memory if no data has been recorded. This value is instrument dependent.
 
 #### `TRACe:CATalog:LENgth?`
 
-**Beskrivelse:** Returnerer faktisk antall blokker innsamlet i minnet (kun 1 returneres).
+**Description:** Returns the actual number of blocks acquired in memory (only 1 is returned).
 
-**Respons:**
+**Response:**
 
 ```
 <number_of_blocks>
 ```
 
-**Eksempel:**
+**Example:**
 
 ```
-TRAC:CAT:LEN?       Respons: 1
+TRAC:CAT:LEN?       Response: 1
 ```
 
-- **\*RST-tilstand:** 1
+- **\*RST state:** 1
 
 #### `TRACe:DELete:ALL`
 
-**Beskrivelse:** Sletter alt minne.
-
-**Eksempel:**
+**Description:** Deletes all memory.
+**Example:**
 
 ```
 TRAC:DEL:ALL
 ```
 
-- **\*RST-tilstand:** Dette er en handling og har ingen reset-tilstand.
-- **Invaliderer:** `TRACe:FREE?`
+- **\*RST state:** This is an event and has no reset state.
+- **Invalidates:** `TRACe:FREE?`
 
-### TRIGger-subsystemet
+### The TRIGger subsystem
 
-TRIGger-subsystemet inneholder kommandoer for å definere betingelsen på en midlet måling som skal utløse en handling. TRIGger-subsystemet har kun effekt hvis minneopptak er aktivert.
+The TRIGger subsystem contains commands for defining the condition on an averaged measurement that is to trigger an action. The TRIGger subsystem only has an effect if memory recording is enabled.
 
-#### Kommandooversikt (TRIGger)
+#### Command overview (TRIGger)
 
-| Kommando | Parameter | Standardverdi/enhet |
+| Command | Parameter | Default value/unit |
 |---|---|---|
 | `TRIGger:STARt:SOURce` | BUS \| TIME \| IMMediate \| MANual \| SYNC \| \<function\> | IMMediate |
 | `TRIGger:STARt:TIME` | yyyy,mm,dd,hh,mm,ss | |
@@ -3176,841 +3175,840 @@ TRIGger-subsystemet inneholder kommandoer for å definere betingelsen på en mid
 
 #### `TRIGger:STARt:SOURce BUS | TIME | IMMediate | MANual | SYNC | <function>`
 
-**Beskrivelse:** Angir starttriggerkilden.
+**Description:** Sets the start trigger source.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| BUS | Trigger når en `*TRG`-kommando mottas. |
-| TIME | Trigger ved eksakt tidspunkt. |
-| IMMediate | Ingen venting på en hendelse. |
-| MANual | Signalet genereres av brukeren ved å trykke på frontpanelets "MEM"-tast. |
-| SYNC | Trigger inntreffer hver gang en flanke av synkroniseringssignalet detekteres. Denne kilden er kun gyldig for REALtime-sweep (for å bruke EXTernal-signalkontakten som trigger må SYNC-kilden settes til EXTernal). |
-| `<function>` | En betingelse på en midlet målefunksjon utløser triggeren. |
+| BUS | Triggers when a `*TRG` command is received. |
+| TIME | Triggers at an exact point in time. |
+| IMMediate | No waiting for an event. |
+| MANual | The signal is generated by the user by pressing the front panel "MEM" key. |
+| SYNC | The trigger occurs every time an edge of the synchronization signal is detected. This source is only valid for the REALtime sweep (to use the EXTernal signal connector as a trigger, the SYNC source must be set to EXTernal). |
+| `<function>` | A condition on an averaged measurement function triggers. |
 
-**Eksempel:**
+**Example:**
 
 ```
 TRIG:STAR:SOUR IMM
-TRIG:STAR:SOUR?     Respons: IMM
+TRIG:STAR:SOUR?     Response: IMM
 ```
 
-- **\*RST-tilstand:** IMM
+- **\*RST state:** IMM
 
 #### `TRIGger:STARt:TIME <yyyy,MM,dd,hh,mm,ss>`
 
-**Beskrivelse:** Minneopptaket starter når instrumentets interne tid når angitt verdi.
+**Description:** The memory recording starts when the instrument's internal time reaches the value given.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| yyyy | År |
-| MM | Måned |
-| dd | Dag |
-| hh | Timer i 24-timers notasjon |
-| mm | Minutter |
-| ss | Sekunder (heltallsverdi) |
+| yyyy | Year |
+| MM | Month |
+| dd | Day |
+| hh | Hours in 24-hour notation |
+| mm | Minutes |
+| ss | Seconds (integer value) |
 
-**Eksempel:**
+**Example:**
 
 ```
 TRIG:STAR:TIME 2002,01,01,11,00,00
-TRIG:STAR:TIME?     Respons: 2002,01,01,11,00,00
+TRIG:STAR:TIME?     Response: 2002,01,01,11,00,00
 ```
 
-- **\*RST-tilstand:** 1970,1,1,0,0,0
+- **\*RST state:** 1970,1,1,0,0,0
 
 #### `TRIGger:STARt:LEVel <level>`
 
-**Beskrivelse:** Når startkilden for opptak er en midlet målefunksjon, angir denne innstillingen målefunksjonsnivået som skal utløse opptaket.
+**Description:** When the start source for recording is an averaged measurement function, this setting states the measurement function level that is to trigger the recording.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `<level>` | Området for denne innstillingen er ikke definert. |
+| `<level>` | The range for this setting is not defined. |
 
-**Eksempel:**
+**Example:**
 
 ```
 TRIG:STARt:LEV 50.0
-TRIG:STARt:LEV?     Respons: 25.0
+TRIG:STARt:LEV?     Response: 25.0
 ```
 
-- **\*RST-tilstand:** 0.0
+- **\*RST state:** 0.0
 
 #### `TRIGger:STARt:SLOPe POSitive | NEGative`
 
-**Beskrivelse:** Når kilden for opptak er en midlet målefunksjon, angir denne innstillingen flanken. (Manualen omtaler her stoppkilden; kommandoen gjelder starttrigger.)
+**Description:** When the source for recording is an averaged measurement function, this setting states the edge. (The manual refers to the stop source here; the command applies to the start trigger.)
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| POSitive | Trigger på positiv flanke. |
-| NEGative | Trigger på negativ flanke. |
+| POSitive | Trigger on the positive edge. |
+| NEGative | Trigger on the negative edge. |
 
-**Eksempel:**
+**Example:**
 
 ```
 TRIG:STAR:SLOP POS
-TRIG:STAR:SLOP?     Respons: POS
+TRIG:STAR:SLOP?     Response: POS
 ```
 
-- **\*RST-tilstand:** POS
+- **\*RST state:** POS
 
 #### `TRIGger:STOP:SOURce TIME | IMMediate | MANual | <function>`
 
-**Beskrivelse:** Stopptriggerkilde. Innsamlingen stopper enten ved angitt dato/klokkeslett, når minnet er fullt, når opptakstiden er nådd, eller når valgt stoppbetingelse nedenfor er oppfylt — det som inntreffer først.
+**Description:** The stop trigger source. Acquisition stops either at the date/time given, when memory is full, when the recording time is reached, or when the stop condition selected below is met — whichever occurs first.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| TIME | Innsamlingen stopper enten når minnet er fullt, opptakstiden er nådd eller ved angitt dato/klokkeslett — det som inntreffer først. |
-| IMMediate | Ingen ekstra stoppbetingelse settes. Innsamlingen stopper enten når minnet er fullt eller opptakstiden er nådd — det som inntreffer først. |
-| MANual | Innsamlingen stopper enten når minnet er fullt, opptakstiden er nådd eller frontpanelets MEM-tast trykkes — det som inntreffer først. For å stoppe minneopptaket umiddelbart, slå av minnesubsystemet. |
-| `<function>` | Innsamlingen stopper enten når minnet er fullt, opptakstiden er nådd, eller betingelsen på valgt funksjon er oppfylt — det som inntreffer først. |
+| TIME | Acquisition stops either when memory is full, when the recording time is reached, or at the date/time given — whichever occurs first. |
+| IMMediate | No additional stop condition is set. Acquisition stops either when memory is full or when the recording time is reached — whichever occurs first. |
+| MANual | Acquisition stops either when memory is full, when the recording time is reached, or when the front panel MEM key is pressed — whichever occurs first. To stop the memory recording immediately, switch off the memory subsystem. |
+| `<function>` | Acquisition stops either when memory is full, when the recording time is reached, or when the condition on the selected function is met — whichever occurs first. |
 
-**Eksempel:**
+**Example:**
 
 ```
 TRIG:STOP:SOUR MAN
-TRIG:STOP:SOUR?     Respons: MAN
+TRIG:STOP:SOUR?     Response: MAN
 ```
 
-- **\*RST-tilstand:** MAN
+- **\*RST state:** MAN
 
 #### `TRIGger:STOP:TIME <yyyy,MM,dd,hh,mm,ss>`
 
-**Beskrivelse:** Minneopptaket stopper når instrumentets interne tid når angitt verdi.
+**Description:** The memory recording stops when the instrument's internal time reaches the value given.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| yyyy | År |
-| MM | Måned |
-| dd | Dag |
-| hh | Timer i 24-timers notasjon |
-| mm | Minutter |
-| ss | Sekunder (heltallsverdi) |
+| yyyy | Year |
+| MM | Month |
+| dd | Day |
+| hh | Hours in 24-hour notation |
+| mm | Minutes |
+| ss | Seconds (integer value) |
 
-**Eksempel:**
+**Example:**
 
 ```
 TRIG:STOP:TIME 2002,01,01,11,00,00
-TRIG:STOP:TIME?     Respons: 2002,01,01,11,00,00
+TRIG:STOP:TIME?     Response: 2002,01,01,11,00,00
 ```
 
-- **\*RST-tilstand:** 1970,1,1,0,0,0
+- **\*RST state:** 1970,1,1,0,0,0
 
 #### `TRIGger:STOP:LEVel <level>`
 
-**Beskrivelse:** Når stoppkilden for opptak er en midlet målefunksjon, angir denne innstillingen målefunksjonsnivået som skal stoppe opptaket.
+**Description:** When the stop source for recording is an averaged measurement function, this setting states the measurement function level that is to stop the recording.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `<level>` | Området for denne innstillingen er ikke definert. |
+| `<level>` | The range for this setting is not defined. |
 
-**Eksempel:**
+**Example:**
 
 ```
 TRIG:STOP:LEV 50.0
-TRIG:STOP:LEV?      Respons: 25.0
+TRIG:STOP:LEV?      Response: 25.0
 ```
 
-- **\*RST-tilstand:** 0.0
+- **\*RST state:** 0.0
 
 #### `TRIGger:STOP:SLOPe POSitive | NEGative`
 
-**Beskrivelse:** Når stoppkilden for opptak er en midlet målefunksjon, angir denne innstillingen flanken.
+**Description:** When the stop source for recording is an averaged measurement function, this setting states the edge.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| POSitive | Stopper opptak på positiv flanke. |
-| NEGative | Stopper opptak på negativ flanke. |
+| POSitive | Stops recording on the positive edge. |
+| NEGative | Stops recording on the negative edge. |
 
-**Eksempel:**
+**Example:**
 
 ```
 TRIG:STOP:SLOP POS
-TRIG:STOP:SLOP?     Respons: POS
+TRIG:STOP:SLOP?     Response: POS
 ```
 
-- **\*RST-tilstand:** POS
+- **\*RST state:** POS
 
-### SYSTem-subsystemet
+### The SYSTem subsystem
 
-I dette subsystemet er en rekke kommandoer for generelle funksjoner som ikke er direkte knyttet til effektanalyse, samlet. Her ligger blant annet kommunikasjonsinnstillingene (`SYSTem:COMMunicate...`).
+This subsystem collects a number of commands for general functions not directly related to power analysis. Among other things, the communication settings (`SYSTem:COMMunicate...`) are found here.
 
-#### Kommandooversikt (SYSTem)
+#### Command overview (SYSTem)
 
-| Kommando | Parameter | Standardverdi/enhet | Merknad |
+| Command | Parameter | Default value/unit | Note |
 |---|---|---|---|
 | `SYSTem:COMMunicate:GPIB[:SELF]:ADDRess` | 1 to 30 | 5 | |
 | `SYSTem:COMMunicate:SERial:BAUD` | 1200 \| 2400 \| 4800 \| 9600 \| 19200 \| 38400 \| 57600 \| 115200 | 115200 bd | |
-| `SYSTem:COMMunicate:SERial:BITS` | 7 \| 8 | 8 bits | \<foreløpig ikke implementert\> |
-| `SYSTem:COMMunicate:SERial:SBITs` | 1 \| 2 | 1 bit | \<foreløpig ikke implementert\> |
-| `SYSTem:COMMunicate:SERial:CONTrol:RTS` | ON \| IBFull \| RFR | RFR | \<foreløpig ikke implementert\> |
-| `SYSTem:COMMunicate:SERial:PACE` | XON \| NONE | NONE | \<foreløpig ikke implementert\> |
-| `SYSTem:COMMunicate:SERial:PARity` | EVEN \| ODD \| ZERO \| ONE \| NONE \| IGNore | NONE | \<foreløpig ikke implementert\> |
+| `SYSTem:COMMunicate:SERial:BITS` | 7 \| 8 | 8 bits | \<not yet implemented\> |
+| `SYSTem:COMMunicate:SERial:SBITs` | 1 \| 2 | 1 bit | \<not yet implemented\> |
+| `SYSTem:COMMunicate:SERial:CONTrol:RTS` | ON \| IBFull \| RFR | RFR | \<not yet implemented\> |
+| `SYSTem:COMMunicate:SERial:PACE` | XON \| NONE | NONE | \<not yet implemented\> |
+| `SYSTem:COMMunicate:SERial:PARity` | EVEN \| ODD \| ZERO \| ONE \| NONE \| IGNore | NONE | \<not yet implemented\> |
 | `SYSTem:DATE` | Year,month,day | | |
 | `SYSTem:TIME` | Hours,minutes,seconds | | |
-| `SYSTem:ERRor[:NEXT]?` | | | Kun spørring |
-| `SYSTem:ERRor:ALL?` | | | Kun spørring |
+| `SYSTem:ERRor[:NEXT]?` | | | Query only |
+| `SYSTem:ERRor:ALL?` | | | Query only |
 | `SYSTem:KLOCk` | ON \| OFF \| REMote | OFF | |
 | `SYSTem:LANGuage` | "DEFault" \| "D5255S" \| "D5255T" \| "D5255M" | "DEFault" | |
-| `SYSTem:VERSion?` | | | Kun spørring |
+| `SYSTem:VERSion?` | | | Query only |
 
 #### `SYSTem:COMMunicate:GPIB[:SELF]:ADDRess <addr>`
 
-**Beskrivelse:** Setter primæradressen til det valgfrie GPIB-grensesnittet.
+**Description:** Sets the primary address of the optional GPIB interface.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `<addr>` | 1 til 30 |
+| `<addr>` | 1 to 30 |
 
-**Respons:** `<addr>`
+**Response:** `<addr>`
 
-**Eksempel:**
+**Example:**
 
 ```
 SYST:COMM:GPIB:ADDR 10
-SYST:COMM:GPIB:ADDR?    Respons: 5
+SYST:COMM:GPIB:ADDR?    Response: 5
 ```
 
-- **\*RST-tilstand:** Påvirkes ikke av `*RST`
+- **\*RST state:** Not affected by `*RST`
 
 #### `SYSTem:COMMunicate:SERial:BAUD <value>`
 
-**Beskrivelse:** Setter baudraten for RS232-grensesnittet.
+**Description:** Sets the baud rate for the RS232 interface.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
 | `<value>` | 1200 \| 2400 \| 4800 \| 9600 \| 19200 \| 38400 \| 57600 \| 115200 |
 
-**Respons:** `<value>`
+**Response:** `<value>`
 
-**Eksempel:**
+**Example:**
 
 ```
 SYST:COMM:SER:BAUD 9600
-SYST:COMM:SER:BAUD?     Respons: 115200
+SYST:COMM:SER:BAUD?     Response: 115200
 ```
 
-- **\*RST-tilstand:** Påvirkes ikke av `*RST`
+- **\*RST state:** Not affected by `*RST`
 
 #### `SYSTem:DATE <year>,<month>,<day>`
 
-**Beskrivelse:** Setter datoen i instrumentets interne klokke.
+**Description:** Sets the date in the instrument's internal clock.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `<year>` | Må være \<numeric_value\>. Året er i firesifret numerisk format. |
-| `<month>` | Må være \<numeric_value\>. Området er 1 til 12 inklusive. Tallet 1 svarer til måneden januar, 2 til februar, og så videre. |
-| `<day>` | Må være \<numeric_value\>. Området er 1 til antall dager i måneden fra forrige parameter. |
+| `<year>` | Must be \<numeric_value\>. The year is in four-digit numeric format. |
+| `<month>` | Must be \<numeric_value\>. The range is 1 to 12 inclusive. The number 1 corresponds to the month January, 2 to February, and so on. |
+| `<day>` | Must be \<numeric_value\>. The range is 1 to the number of days in the month from the previous parameter. |
 
-**Eksempel:**
+**Example:**
 
 ```
 SYST:DATE 2001,2,5
-SYST:DATE?          Respons: 2001,2,5
+SYST:DATE?          Response: 2001,2,5
 ```
 
-- **\*RST-tilstand:** Påvirkes ikke av reset.
+- **\*RST state:** Not affected by reset.
 
 #### `SYSTem:TIME <hours>,<minutes>,<seconds>`
 
-**Beskrivelse:** Setter klokkeslettet i instrumentets interne klokke.
+**Description:** Sets the time in the instrument's internal clock.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| `<hours>` | Må være \<numeric_value\>. Timene er i 24-timers notasjon. |
-| `<minutes>` | Må være \<numeric_value\>. Området er 0 til 59 inklusive. |
-| `<seconds>` | Må være \<numeric_value\>. Området er 0 til 59 inklusive. |
+| `<hours>` | Must be \<numeric_value\>. The hours are in 24-hour notation. |
+| `<minutes>` | Must be \<numeric_value\>. The range is 0 to 59 inclusive. |
+| `<seconds>` | Must be \<numeric_value\>. The range is 0 to 59 inclusive. |
 
-**Eksempel:**
+**Example:**
 
 ```
 SYST:TIME 15,45,23
-SYST:TIME?          Respons: 15,45,23
+SYST:TIME?          Response: 15,45,23
 ```
 
-- **\*RST-tilstand:** Påvirkes ikke av reset.
+- **\*RST state:** Not affected by reset.
 
 #### `SYSTem:ERRor[:NEXT]?`
 
-**Beskrivelse:** Spør feil-/hendelseskøen etter neste element og fjerner det fra køen. Responsen returnerer hele køelementet bestående av et heltall og en streng. Hvis det ikke er noen feil i køen, returneres `0,"No error"`.
+**Description:** Queries the error/event queue for the next item and removes it from the queue. The response returns the entire queue item, consisting of an integer and a string. If there are no errors in the queue, `0,"No error"` is returned.
 
-**Respons:**
+**Response:**
 
 ```
 <code>,<text description>
 ```
 
-**Eksempel:**
+**Example:**
 
 ```
-SYST:ERR?           Respons: -100,"Command Error"
+SYST:ERR?           Response: -100,"Command Error"
 ```
 
-- **\*RST-tilstand:** Påvirkes ikke av reset.
+- **\*RST state:** Not affected by reset.
 
 #### `SYSTem:ERRor:ALL?`
 
-**Beskrivelse:** Spør feil-/hendelseskøen etter alle elementer og fjerner dem fra køen. Responsen returnerer en semikolonseparert liste av hele køelementer bestående av heltall/streng-par. Hvis det ikke er noen feil i køen, returneres `0,"No error"`.
+**Description:** Queries the error/event queue for all items and removes them from the queue. The response returns a semicolon-separated list of entire queue items consisting of integer/string pairs. If there are no errors in the queue, `0,"No error"` is returned.
 
-**Respons:**
+**Response:**
 
 ```
 <code>,<text description>[;<code>,<text description>[; ...]]
 ```
 
-**Eksempel:**
+**Example:**
 
 ```
 SYST:ERR:ALL?
-Respons: -102,"Syntax Error";-113,"Undefined Header"
+Response: -102,"Syntax Error";-113,"Undefined Header"
 ```
 
-- **\*RST-tilstand:** Påvirkes ikke av reset.
+- **\*RST state:** Not affected by reset.
 
 #### `SYSTem:KLOCk ON | OFF | REMote`
 
-**Beskrivelse:** Denne kommandoen låser de lokale betjeningsorganene på instrumentet. Dette inkluderer frontpanel, tastatur og andre lokale grensesnitt.
+**Description:** This command locks the local controls on the instrument. This includes the front panel, keyboard and other local interfaces.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| ON | Alle frontpanelkontroller er låst. |
-| OFF | Alle frontpanelkontroller kan betjenes av brukeren. |
-| REMote | Alle frontpanelkontroller unntatt F6/Esc låses når en fjernstyringskommando mottas. |
+| ON | All front panel controls are locked. |
+| OFF | All front panel controls can be operated by the user. |
+| REMote | All front panel controls except F6/Esc are locked when a remote control command is received. |
 
-**Eksempel:**
+**Example:**
 
 ```
 SYST:KLOC ON
-SYST:KLOC?          Respons: 1
+SYST:KLOC?          Response: 1
 ```
 
-- **\*RST-tilstand:** OFF
+- **\*RST state:** OFF
 
 #### `SYSTem:LANGuage "DEFault" | "D5255S" | "D5255T" | "D5255M"`
 
-**Beskrivelse:** Bytter til et annet kommandospråk. Det standard SCPI-kommandosettet forstås til enhver tid.
+**Description:** Switches to a different command language. The standard SCPI command set is understood at all times.
 
-**Parametre:**
+**Parameters:**
 
-| Parameter | Betydning |
+| Parameter | Meaning |
 |---|---|
-| "DEFault" | Standard SCPI-kommandosett. |
-| "D5255S" | Eldre (legacy) kommandosett brukt av Norma D5255 Standard. |
-| "D5255T" | Eldre (legacy) kommandosett brukt av Norma D5255 Transformer / Rectified Mean. |
-| "D5255M" | Eldre (legacy) kommandosett brukt av D5255 Motor. |
+| "DEFault" | Standard SCPI command set. |
+| "D5255S" | Legacy command set used by the Norma D5255 Standard. |
+| "D5255T" | Legacy command set used by the Norma D5255 Transformer / Rectified Mean. |
+| "D5255M" | Legacy command set used by the D5255 Motor. |
 
-**Eksempel:**
+**Example:**
 
 ```
 SYST:LANGuage "D5255S"
 ```
 
-- **\*RST-tilstand:** "DEFault"
+- **\*RST state:** "DEFault"
 
 #### `SYSTem:VERSion?`
 
-**Beskrivelse:** Denne spørringen returnerer en \<NR2\>-formatert numerisk verdi som svarer til SCPI-versjonsnummeret instrumentet er i samsvar med. Responsen har formen YYYY.V, der Y-ene representerer årsversjonen (f.eks. 1990) og V representerer et godkjent revisjonsnummer for det året.
+**Description:** This query returns an \<NR2\>-formatted numeric value corresponding to the SCPI version number the instrument conforms to. The response has the form YYYY.V, where the Ys represent the year version (e.g. 1990) and V represents an approved revision number for that year.
 
-**Respons:**
+**Response:**
 
 ```
 <version>
 ```
 
-**Eksempel:**
+**Example:**
 
 ```
-SYST:VERS?          Respons: 1999.0
+SYST:VERS?          Response: 1999.0
 ```
 
-- **\*RST-tilstand:** Påvirkes ikke av reset.
+- **\*RST state:** Not affected by reset.
 
-### STATus-subsystemet
+### The STATus subsystem
 
-STATus-subsystemet inneholder kommandoene for statusrapporteringssystemet (se avsnittet "Status Reporting System"). `*RST` påvirker ikke statusregistrene.
+The STATus subsystem contains the commands for the status reporting system (see the "Status Reporting System" section). `*RST` does not affect the status registers.
 
-#### Kommandooversikt (STATus)
+#### Command overview (STATus)
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
-| `STATus:OPERation[:EVENt]?` | | Kun spørring |
-| `STATus:OPERation:CONDition?` | | Kun spørring |
+| `STATus:OPERation[:EVENt]?` | | Query only |
+| `STATus:OPERation:CONDition?` | | Query only |
 | `STATus:OPERation:ENABle` | 0 to 65535 | |
 | `STATus:OPERation:PTRansition` | 0 to 65535 | |
 | `STATus:OPERation:NTRansition` | 0 to 65535 | |
-| `STATus:QUEStionable[:EVENt]?` | | Kun spørring |
-| `STATus:QUEStionable:CONDition?` | | Kun spørring |
+| `STATus:QUEStionable[:EVENt]?` | | Query only |
+| `STATus:QUEStionable:CONDition?` | | Query only |
 | `STATus:QUEStionable:ENABle` | 0 to 65535 | |
 | `STATus:QUEStionable:PTRansition` | 0 to 65535 | |
 | `STATus:QUEStionable:NTRansition` | 0 to 65535 | |
-| `STATus:QUEStionable:VOLTage[:EVENt]?` | | Kun spørring |
-| `STATus:QUEStionable:VOLTage:CONDition?` | | Kun spørring |
+| `STATus:QUEStionable:VOLTage[:EVENt]?` | | Query only |
+| `STATus:QUEStionable:VOLTage:CONDition?` | | Query only |
 | `STATus:QUEStionable:VOLTage:ENABle` | 0 to 65535 | |
 | `STATus:QUEStionable:VOLTage:PTRansition` | 0 to 65535 | |
 | `STATus:QUEStionable:VOLTage:NTRansition` | 0 to 65535 | |
-| `STATus:QUEStionable:CURRent[:EVENt]?` | | Kun spørring |
-| `STATus:QUEStionable:CURRent:CONDition?` | | Kun spørring |
+| `STATus:QUEStionable:CURRent[:EVENt]?` | | Query only |
+| `STATus:QUEStionable:CURRent:CONDition?` | | Query only |
 | `STATus:QUEStionable:CURRent:ENABle` | 0 to 65535 | |
 | `STATus:QUEStionable:CURRent:PTRansition` | 0 to 65535 | |
 | `STATus:QUEStionable:CURRent:NTRansition` | 0 to 65535 | |
 
 #### `STATus:QUEStionable:VOLTage:CONDition?`
 
-**Beskrivelse:** Returnerer innholdet i tilstandsregisteret (condition register) knyttet til statusstrukturen definert i kommandoen. Lesing av tilstandsregisteret er ikke-destruktiv. Responsen er (NR1 NUMERIC RESPONSE DATA) (område: 0 til og med 32767).
+**Description:** Returns the contents of the condition register associated with the status structure defined in the command. Reading the condition register is non-destructive. The response is (NR1 NUMERIC RESPONSE DATA) (range: 0 through 32767).
 
-**Respons:** `<value>` er et 16-bits heltall i desimalnotasjon.
+**Response:** `<value>` is a 16-bit integer in decimal notation.
 
-| Biter | Betydning |
+| Bits | Meaning |
 |---|---|
-| bit 0 til 5 | Spenningskanaler (1, 3, 5, 7, 9, 11) overlast (overload). |
-| bit 8 til 13 | Spenningskanaler (1, 3, 5, 7, 9, 11) underlast (underload). |
+| bits 0 to 5 | Voltage channels (1, 3, 5, 7, 9, 11) overload. |
+| bits 8 to 13 | Voltage channels (1, 3, 5, 7, 9, 11) underload. |
 
-**Eksempel:**
+**Example:**
 
 ```
-STAT:QUES:VOLT:COND?    Respons: 2 (spenningsoverlast på fase 2)
+STAT:QUES:VOLT:COND?    Response: 2 (voltage overload on phase 2)
 ```
 
-- **\*RST-tilstand:** Har ingen effekt.
-
+- **\*RST state:** Has no effect.
 #### `STATus:QUEStionable:VOLTage:PTRansition <value>`
 
-**Beskrivelse:** Setter det positive transisjonsfilteret. Å sette en bit i det positive transisjonsfilteret gjør at en 0-til-1-overgang i tilhørende bit i det tilknyttede tilstandsregisteret fører til at 1 skrives i tilhørende bit i det tilknyttede hendelsesregisteret. Kommandoen aksepterer parameterverdier i begge formater i området 0 til og med 65535 (desimalt) uten feil. Spørringsresponsformatet er \<NR1\>.
+**Description:** Sets the positive transition filter. Setting a bit in the positive transition filter causes a 0-to-1 transition in the corresponding bit of the associated condition register to write a 1 into the corresponding bit of the associated event register. The command accepts parameter values in either format in the range 0 through 65535 (decimal) without error. The query response format is \<NR1\>.
 
-**Parametre:**
+**Parameters:**
 
-| Biter | Betydning |
+| Bits | Meaning |
 |---|---|
-| bit 0 til 5 | Spenningskanaler (1, 3, 5, 7, 9, 11) overlast, positiv transisjon. |
-| bit 8 til 13 | Spenningskanaler (1, 3, 5, 7, 9, 11) underlast, positiv transisjon. |
+| bits 0 to 5 | Voltage channels (1, 3, 5, 7, 9, 11) overload, positive transition. |
+| bits 8 to 13 | Voltage channels (1, 3, 5, 7, 9, 11) underload, positive transition. |
 
-**Eksempel:**
+**Example:**
 
 ```
 STAT:QUES:VOLT:PTR 16191
-STAT:QUES:VOLT:PTR?     Respons: 16191
+STAT:QUES:VOLT:PTR?     Response: 16191
 ```
 
-- **\*RST-tilstand:** 0
+- **\*RST state:** 0
 
 #### `STATus:QUEStionable:VOLTage:NTRansition <value>`
 
-**Beskrivelse:** Setter det negative transisjonsfilteret. Å sette en bit i det negative transisjonsfilteret gjør at en 0-til-1-overgang i tilhørende bit i det tilknyttede tilstandsregisteret fører til at 1 skrives i tilhørende bit i det tilknyttede hendelsesregisteret. Kommandoen aksepterer parameterverdier i begge formater i området 0 til og med 65535 (desimalt) uten feil. Spørringsresponsformatet er \<NR1\>.
+**Description:** Sets the negative transition filter. Setting a bit in the negative transition filter causes a 0-to-1 transition in the corresponding bit of the associated condition register to write a 1 into the corresponding bit of the associated event register. The command accepts parameter values in either format in the range 0 through 65535 (decimal) without error. The query response format is \<NR1\>.
 
-**Parametre:**
+**Parameters:**
 
-| Biter | Betydning |
+| Bits | Meaning |
 |---|---|
-| bit 0 til 5 | Spenningskanaler (1, 3, 5, 7, 9, 11) overlast, negativ transisjon. |
-| bit 8 til 13 | Spenningskanaler (1, 3, 5, 7, 9, 11) underlast, negativ transisjon. |
+| bits 0 to 5 | Voltage channels (1, 3, 5, 7, 9, 11) overload, negative transition. |
+| bits 8 to 13 | Voltage channels (1, 3, 5, 7, 9, 11) underload, negative transition. |
 
-**Eksempel:**
+**Example:**
 
 ```
 STAT:QUES:VOLT:NTR 16191
-STAT:QUES:VOLT:NTR?     Respons: 16191
+STAT:QUES:VOLT:NTR?     Response: 16191
 ```
 
-- **\*RST-tilstand:** 0
+- **\*RST state:** 0
 
 #### `STATus:QUEStionable:VOLTage[:EVENt]?`
 
-**Beskrivelse:** Denne spørringen returnerer innholdet i hendelsesregisteret (event register) knyttet til statusstrukturen definert i kommandoen. Responsen er (NR1 NUMERIC RESPONSE DATA) (område: 0 til og med 32767). Merk at lesing av hendelsesregisteret nullstiller det.
+**Description:** This query returns the contents of the event register associated with the status structure defined in the command. The response is (NR1 NUMERIC RESPONSE DATA) (range: 0 through 32767). Note that reading the event register clears it.
 
-**Respons:** `<value>` er et 16-bits heltall i desimalnotasjon.
+**Response:** `<value>` is a 16-bit integer in decimal notation.
 
-| Biter | Betydning |
+| Bits | Meaning |
 |---|---|
-| bit 0 til 5 | Spenningskanaler (1, 3, 5, 7, 9, 11) overlast-hendelse. |
-| bit 8 til 13 | Spenningskanaler (1, 3, 5, 7, 9, 11) underlast-hendelse. |
+| bits 0 to 5 | Voltage channels (1, 3, 5, 7, 9, 11) overload event. |
+| bits 8 to 13 | Voltage channels (1, 3, 5, 7, 9, 11) underload event. |
 
-**Eksempel:**
+**Example:**
 
 ```
-STAT:QUES:VOLT?         Respons: 2 (spenningsoverlast på fase 2)
+STAT:QUES:VOLT?         Response: 2 (voltage overload on phase 2)
 ```
 
-- **\*RST-tilstand:** Har ingen effekt.
+- **\*RST state:** Has no effect.
 
 #### `STATus:QUEStionable:VOLTage:ENABle <value>`
 
-**Beskrivelse:** Setter aktiveringsmasken (enable mask) som tillater at sanne tilstander i hendelsesregisteret rapporteres i sammendragsbiten (summary bit). Hvis en bit er 1 i enable-registeret og den tilknyttede hendelsesbiten går til sann, inntreffer en positiv transisjon i den tilknyttede sammendragsbiten. Kommandoen aksepterer parameterverdier i begge formater i området 0 til og med 65535 (desimalt) uten feil. Spørringsresponsformatet er \<NR1\>.
+**Description:** Sets the enable mask that allows true conditions in the event register to be reported in the summary bit. If a bit is 1 in the enable register and the associated event bit goes true, a positive transition occurs in the associated summary bit. The command accepts parameter values in either format in the range 0 through 65535 (decimal) without error. The query response format is \<NR1\>.
 
-**Parametre:**
+**Parameters:**
 
-| Biter | Betydning |
+| Bits | Meaning |
 |---|---|
-| bit 0 til 5 | Spenningskanaler (1, 3, 5, 7, 9, 11), aktiver overlast-hendelse. |
-| bit 8 til 13 | Spenningskanaler (1, 3, 5, 7, 9, 11), aktiver underlast-hendelse. |
+| bits 0 to 5 | Voltage channels (1, 3, 5, 7, 9, 11), enable overload event. |
+| bits 8 to 13 | Voltage channels (1, 3, 5, 7, 9, 11), enable underload event. |
 
-**Eksempel:**
+**Example:**
 
 ```
 STAT:QUES:VOLT:ENAB 16191
-STAT:QUES:VOLT:ENAB?    Respons: 16191
+STAT:QUES:VOLT:ENAB?    Response: 16191
 ```
 
-- **\*RST-tilstand:** 0
+- **\*RST state:** 0
 
 #### `STATus:QUEStionable:CURRent:CONDition?`
 
-**Beskrivelse:** Returnerer innholdet i tilstandsregisteret knyttet til statusstrukturen definert i kommandoen. Lesing av tilstandsregisteret er ikke-destruktiv. Responsen er (NR1 NUMERIC RESPONSE DATA) (område: 0 til og med 32767).
+**Description:** Returns the contents of the condition register associated with the status structure defined in the command. Reading the condition register is non-destructive. The response is (NR1 NUMERIC RESPONSE DATA) (range: 0 through 32767).
 
-**Respons:** `<value>` er et 16-bits heltall i desimalnotasjon.
+**Response:** `<value>` is a 16-bit integer in decimal notation.
 
-| Biter | Betydning |
+| Bits | Meaning |
 |---|---|
-| bit 0 til 5 | Strømkanaler (0, 2, 4, 6, 8, 10) overlast. |
-| bit 8 til 13 | Strømkanaler (0, 2, 4, 6, 8, 10) underlast. |
+| bits 0 to 5 | Current channels (0, 2, 4, 6, 8, 10) overload. |
+| bits 8 to 13 | Current channels (0, 2, 4, 6, 8, 10) underload. |
 
-**Eksempel:**
+**Example:**
 
 ```
-STAT:QUES:CURR:COND?    Respons: 2 (strømoverlast på fase 2)
+STAT:QUES:CURR:COND?    Response: 2 (current overload on phase 2)
 ```
 
-- **\*RST-tilstand:** Har ingen effekt.
+- **\*RST state:** Has no effect.
 
 #### `STATus:QUEStionable:CURRent:PTRansition <value>`
 
-**Beskrivelse:** Setter det positive transisjonsfilteret. Å sette en bit i det positive transisjonsfilteret gjør at en 0-til-1-overgang i tilhørende bit i det tilknyttede tilstandsregisteret fører til at 1 skrives i tilhørende bit i det tilknyttede hendelsesregisteret. Kommandoen aksepterer parameterverdier i begge formater i området 0 til og med 65535 (desimalt) uten feil. Spørringsresponsformatet er \<NR1\>.
+**Description:** Sets the positive transition filter. Setting a bit in the positive transition filter causes a 0-to-1 transition in the corresponding bit of the associated condition register to write a 1 into the corresponding bit of the associated event register. The command accepts parameter values in either format in the range 0 through 65535 (decimal) without error. The query response format is \<NR1\>.
 
-**Parametre:**
+**Parameters:**
 
-| Biter | Betydning |
+| Bits | Meaning |
 |---|---|
-| bit 0 til 5 | Strømkanaler (0, 2, 4, 6, 8, 10) overlast, positiv transisjon. |
-| bit 8 til 13 | Strømkanaler (0, 2, 4, 6, 8, 10) underlast, positiv transisjon. |
+| bits 0 to 5 | Current channels (0, 2, 4, 6, 8, 10) overload, positive transition. |
+| bits 8 to 13 | Current channels (0, 2, 4, 6, 8, 10) underload, positive transition. |
 
-**Eksempel:**
+**Example:**
 
 ```
 STAT:QUES:CURR:PTR 16191
-STAT:QUES:CURR:PTR?     Respons: 16191
+STAT:QUES:CURR:PTR?     Response: 16191
 ```
 
-- **\*RST-tilstand:** 0
+- **\*RST state:** 0
 
 #### `STATus:QUEStionable:CURRent:NTRansition <value>`
 
-**Beskrivelse:** Setter det negative transisjonsfilteret. Å sette en bit i det negative transisjonsfilteret gjør at en 0-til-1-overgang i tilhørende bit i det tilknyttede tilstandsregisteret fører til at 1 skrives i tilhørende bit i det tilknyttede hendelsesregisteret. Kommandoen aksepterer parameterverdier i begge formater i området 0 til og med 65535 (desimalt) uten feil. Spørringsresponsformatet er \<NR1\>.
+**Description:** Sets the negative transition filter. Setting a bit in the negative transition filter causes a 0-to-1 transition in the corresponding bit of the associated condition register to write a 1 into the corresponding bit of the associated event register. The command accepts parameter values in either format in the range 0 through 65535 (decimal) without error. The query response format is \<NR1\>.
 
-**Parametre:**
+**Parameters:**
 
-| Biter | Betydning |
+| Bits | Meaning |
 |---|---|
-| bit 0 til 5 | Strømkanaler (0, 2, 4, 6, 8, 10) overlast, negativ transisjon. |
-| bit 8 til 13 | Strømkanaler (0, 2, 4, 6, 8, 10) underlast, negativ transisjon. |
+| bits 0 to 5 | Current channels (0, 2, 4, 6, 8, 10) overload, negative transition. |
+| bits 8 to 13 | Current channels (0, 2, 4, 6, 8, 10) underload, negative transition. |
 
-**Eksempel:**
+**Example:**
 
 ```
 STAT:QUES:CURR:NTR 16191
-STAT:QUES:CURR:NTR?     Respons: 16191
+STAT:QUES:CURR:NTR?     Response: 16191
 ```
 
-- **\*RST-tilstand:** 0
+- **\*RST state:** 0
 
 #### `STATus:QUEStionable:CURRent[:EVENt]?`
 
-**Beskrivelse:** Denne spørringen returnerer innholdet i hendelsesregisteret knyttet til statusstrukturen definert i kommandoen. Responsen er (NR1 NUMERIC RESPONSE DATA) (område: 0 til og med 32767). Merk at lesing av hendelsesregisteret nullstiller det.
+**Description:** This query returns the contents of the event register associated with the status structure defined in the command. The response is (NR1 NUMERIC RESPONSE DATA) (range: 0 through 32767). Note that reading the event register clears it.
 
-**Respons:** `<value>` er et 16-bits heltall i desimalnotasjon.
+**Response:** `<value>` is a 16-bit integer in decimal notation.
 
-| Biter | Betydning |
+| Bits | Meaning |
 |---|---|
-| bit 0 til 5 | Strømkanaler (0, 2, 4, 6, 8, 10) hendelse. |
-| bit 8 til 13 | Strømkanaler (0, 2, 4, 6, 8, 10) hendelse. |
+| bits 0 to 5 | Current channels (0, 2, 4, 6, 8, 10) event. |
+| bits 8 to 13 | Current channels (0, 2, 4, 6, 8, 10) event. |
 
-**Eksempel:**
+**Example:**
 
 ```
-STAT:QUES:CURR?         Respons: 2 (strømoverlast på fase 2)
+STAT:QUES:CURR?         Response: 2 (current overload on phase 2)
 ```
 
-- **\*RST-tilstand:** Har ingen effekt.
+- **\*RST state:** Has no effect.
 
 #### `STATus:QUEStionable:CURRent:ENABle <value>`
 
-**Beskrivelse:** Setter aktiveringsmasken som tillater at sanne tilstander i hendelsesregisteret rapporteres i sammendragsbiten. Hvis en bit er 1 i enable-registeret og den tilknyttede hendelsesbiten går til sann, inntreffer en positiv transisjon i den tilknyttede sammendragsbiten. Kommandoen aksepterer parameterverdier i begge formater i området 0 til og med 65535 (desimalt) uten feil. Spørringsresponsformatet er \<NR1\>.
+**Description:** Sets the enable mask that allows true conditions in the event register to be reported in the summary bit. If a bit is 1 in the enable register and the associated event bit goes true, a positive transition occurs in the associated summary bit. The command accepts parameter values in either format in the range 0 through 65535 (decimal) without error. The query response format is \<NR1\>.
 
-**Parametre:**
+**Parameters:**
 
-| Biter | Betydning |
+| Bits | Meaning |
 |---|---|
-| bit 0 til 5 | Strømkanaler (0, 2, 4, 6, 8, 10), aktiver overlast-hendelse. |
-| bit 8 til 13 | Strømkanaler (0, 2, 4, 6, 8, 10), aktiver underlast-hendelse. |
+| bits 0 to 5 | Current channels (0, 2, 4, 6, 8, 10), enable overload event. |
+| bits 8 to 13 | Current channels (0, 2, 4, 6, 8, 10), enable underload event. |
 
-**Eksempel:**
+**Example:**
 
 ```
 STAT:QUES:CURR:ENAB 16191
-STAT:QUES:CURR:ENAB?    Respons: 16191
+STAT:QUES:CURR:ENAB?    Response: 16191
 ```
 
-- **\*RST-tilstand:** 0
+- **\*RST state:** 0
 
 #### `STATus:QUEStionable:CONDition?`
 
-**Beskrivelse:** Returnerer innholdet i tilstandsregisteret knyttet til statusstrukturen definert i kommandoen. Lesing av tilstandsregisteret er ikke-destruktiv. Responsen er (NR1 NUMERIC RESPONSE DATA) (område: 0 til og med 32767).
+**Description:** Returns the contents of the condition register associated with the status structure defined in the command. Reading the condition register is non-destructive. The response is (NR1 NUMERIC RESPONSE DATA) (range: 0 through 32767).
 
-**Respons:** `<value>` er et 16-bits heltall i desimalnotasjon.
+**Response:** `<value>` is a 16-bit integer in decimal notation.
 
-| Bit | Betydning |
+| Bit | Meaning |
 |---|---|
-| bit 0 | Spenningssammendrag questionable. |
-| bit 1 | Strømsammendrag questionable. |
-| bit 5 | Frekvens questionable. |
+| bit 0 | Voltage summary questionable. |
+| bit 1 | Current summary questionable. |
+| bit 5 | Frequency questionable. |
 
-**Eksempel:**
+**Example:**
 
 ```
 STAT:QUES:COND?
-Respons: 1 (spenningsover-/underlast på en eller annen fase)
+Response: 1 (voltage over/underload on some phase)
 ```
 
-- **\*RST-tilstand:** Har ingen effekt.
+- **\*RST state:** Has no effect.
 
 #### `STATus:QUEStionable:PTRansition <value>`
 
-**Beskrivelse:** Setter det positive transisjonsfilteret. Å sette en bit i det positive transisjonsfilteret gjør at en 0-til-1-overgang i tilhørende bit i det tilknyttede tilstandsregisteret fører til at 1 skrives i tilhørende bit i det tilknyttede hendelsesregisteret. Kommandoen aksepterer parameterverdier i begge formater i området 0 til og med 65535 (desimalt) uten feil. Spørringsresponsformatet er \<NR1\>.
+**Description:** Sets the positive transition filter. Setting a bit in the positive transition filter causes a 0-to-1 transition in the corresponding bit of the associated condition register to write a 1 into the corresponding bit of the associated event register. The command accepts parameter values in either format in the range 0 through 65535 (decimal) without error. The query response format is \<NR1\>.
 
-**Parametre:**
+**Parameters:**
 
-| Bit | Betydning |
+| Bit | Meaning |
 |---|---|
-| bit 0 | Spenningssammendrag questionable. |
-| bit 1 | Strømsammendrag questionable. |
-| bit 5 | Frekvens questionable. |
+| bit 0 | Voltage summary questionable. |
+| bit 1 | Current summary questionable. |
+| bit 5 | Frequency questionable. |
 
-**Eksempel:**
+**Example:**
 
 ```
 STAT:QUES:PTR 35
-STAT:QUES:PTR?      Respons: 35
+STAT:QUES:PTR?      Response: 35
 ```
 
-- **\*RST-tilstand:** 0
+- **\*RST state:** 0
 
 #### `STATus:QUEStionable:NTRansition <value>`
 
-**Beskrivelse:** Setter det negative transisjonsfilteret. Å sette en bit i det negative transisjonsfilteret gjør at en 0-til-1-overgang i tilhørende bit i det tilknyttede tilstandsregisteret fører til at 1 skrives i tilhørende bit i det tilknyttede hendelsesregisteret. Kommandoen aksepterer parameterverdier i begge formater i området 0 til og med 65535 (desimalt) uten feil. Spørringsresponsformatet er \<NR1\>.
+**Description:** Sets the negative transition filter. Setting a bit in the negative transition filter causes a 0-to-1 transition in the corresponding bit of the associated condition register to write a 1 into the corresponding bit of the associated event register. The command accepts parameter values in either format in the range 0 through 65535 (decimal) without error. The query response format is \<NR1\>.
 
-**Parametre:**
+**Parameters:**
 
-| Bit | Betydning |
+| Bit | Meaning |
 |---|---|
-| bit 0 | Spenningssammendrag questionable. |
-| bit 1 | Strømsammendrag questionable. |
-| bit 5 | Frekvens questionable. |
+| bit 0 | Voltage summary questionable. |
+| bit 1 | Current summary questionable. |
+| bit 5 | Frequency questionable. |
 
-**Eksempel:**
+**Example:**
 
 ```
 STAT:QUES:NTR 35
-STAT:QUES:NTR?      Respons: 35
+STAT:QUES:NTR?      Response: 35
 ```
 
-- **\*RST-tilstand:** 0
+- **\*RST state:** 0
 
 #### `STATus:QUEStionable[:EVENt]?`
 
-**Beskrivelse:** Denne spørringen returnerer innholdet i hendelsesregisteret knyttet til statusstrukturen definert i kommandoen. Responsen er (NR1 NUMERIC RESPONSE DATA) (område: 0 til og med 32767). Merk at lesing av hendelsesregisteret nullstiller det.
+**Description:** This query returns the contents of the event register associated with the status structure defined in the command. The response is (NR1 NUMERIC RESPONSE DATA) (range: 0 through 32767). Note that reading the event register clears it.
 
-**Respons:** `<value>` er et 16-bits heltall i desimalnotasjon.
+**Response:** `<value>` is a 16-bit integer in decimal notation.
 
-| Bit | Betydning |
+| Bit | Meaning |
 |---|---|
-| bit 0 | Spenningssammendrag questionable. |
-| bit 1 | Strømsammendrag questionable. |
-| bit 5 | Frekvens questionable. |
+| bit 0 | Voltage summary questionable. |
+| bit 1 | Current summary questionable. |
+| bit 5 | Frequency questionable. |
 
-**Eksempel:**
+**Example:**
 
 ```
-STAT:QUES?          Respons: 1 (spenningsoverlast/-underlast på en eller annen fase)
+STAT:QUES?          Response: 1 (voltage overload/underload on some phase)
 ```
 
-- **\*RST-tilstand:** Har ingen effekt.
+- **\*RST state:** Has no effect.
 
 #### `STATus:QUEStionable:ENABle <value>`
 
-**Beskrivelse:** Setter aktiveringsmasken som tillater at sanne tilstander i hendelsesregisteret rapporteres i sammendragsbiten. Hvis en bit er 1 i enable-registeret og den tilknyttede hendelsesbiten går til sann, inntreffer en positiv transisjon i den tilknyttede sammendragsbiten. Kommandoen aksepterer parameterverdier i begge formater i området 0 til og med 65535 (desimalt) uten feil. Spørringsresponsformatet er \<NR1\>.
+**Description:** Sets the enable mask that allows true conditions in the event register to be reported in the summary bit. If a bit is 1 in the enable register and the associated event bit goes true, a positive transition occurs in the associated summary bit. The command accepts parameter values in either format in the range 0 through 65535 (decimal) without error. The query response format is \<NR1\>.
 
-**Parametre:**
+**Parameters:**
 
-| Bit | Betydning |
+| Bit | Meaning |
 |---|---|
-| bit 0 | Spenningssammendrag questionable. |
-| bit 1 | Strømsammendrag questionable. |
-| bit 5 | Frekvens questionable. |
+| bit 0 | Voltage summary questionable. |
+| bit 1 | Current summary questionable. |
+| bit 5 | Frequency questionable. |
 
-**Eksempel:**
+**Example:**
 
 ```
 STAT:QUES:ENAB 35
-STAT:QUES:ENAB?     Respons: 35
+STAT:QUES:ENAB?     Response: 35
 ```
 
-- **\*RST-tilstand:** 0
+- **\*RST state:** 0
 
 #### `STATus:OPERation:CONDition?`
 
-**Beskrivelse:** Returnerer innholdet i tilstandsregisteret knyttet til statusstrukturen definert i kommandoen. Lesing av tilstandsregisteret er ikke-destruktiv. Responsen er (NR1 NUMERIC RESPONSE DATA) (område: 0 til og med 32767).
+**Description:** Returns the contents of the condition register associated with the status structure defined in the command. Reading the condition register is non-destructive. The response is (NR1 NUMERIC RESPONSE DATA) (range: 0 through 32767).
 
-**Respons:**
+**Response:**
 
-| Bit | Betydning |
+| Bit | Meaning |
 |---|---|
-| bit 2 | Ranging (bytter måleområde). |
-| bit 3 | Sweeping (minneopptak pågår). |
-| bit 5 | Venter på trigger. |
-| bit 8 | Synkronisert (hvis sync-kilden endres, oppstår en glitch). |
-| bit 10 | Midling (midling pågår; ved slutten av hver midlingssyklus oppstår en glitch). |
-| bit 12 | Spektrum-CALCulation pågår. |
+| bit 2 | Ranging (changing measurement range). |
+| bit 3 | Sweeping (memory recording in progress). |
+| bit 5 | Waiting for trigger. |
+| bit 8 | Synchronized (if the sync source changes, a glitch occurs). |
+| bit 10 | Averaging (averaging in progress; at the end of each averaging cycle a glitch occurs). |
+| bit 12 | Spectrum CALCulation in progress. |
 
-**Eksempel:**
+**Example:**
 
 ```
-STAT:OPER:COND?     Respons: 1280 (synkronisert og midler)
+STAT:OPER:COND?     Response: 1280 (synchronized and averaging)
 ```
 
-- **\*RST-tilstand:** Har ingen effekt.
+- **\*RST state:** Has no effect.
 
 #### `STATus:OPERation:PTRansition <value>`
 
-**Beskrivelse:** Setter det positive transisjonsfilteret. Å sette en bit i det positive transisjonsfilteret gjør at en 0-til-1-overgang i tilhørende bit i det tilknyttede tilstandsregisteret fører til at 1 skrives i tilhørende bit i det tilknyttede hendelsesregisteret.
+**Description:** Sets the positive transition filter. Setting a bit in the positive transition filter causes a 0-to-1 transition in the corresponding bit of the associated condition register to write a 1 into the corresponding bit of the associated event register.
 
-**Parametre:**
+**Parameters:**
 
-| Bit | Betydning |
+| Bit | Meaning |
 |---|---|
-| bit 2 | Ranging (bytter måleområde). |
-| bit 3 | Sweeping (minneopptak pågår). |
-| bit 5 | Venter på trigger. |
-| bit 8 | Synkronisert (hvis sync-kilden endres, oppstår en glitch). |
-| bit 10 | Midling (midling pågår; ved slutten av hver midlingssyklus oppstår en glitch). |
-| bit 12 | Spektrum-CALCulation pågår. |
+| bit 2 | Ranging (changing measurement range). |
+| bit 3 | Sweeping (memory recording in progress). |
+| bit 5 | Waiting for trigger. |
+| bit 8 | Synchronized (if the sync source changes, a glitch occurs). |
+| bit 10 | Averaging (averaging in progress; at the end of each averaging cycle a glitch occurs). |
+| bit 12 | Spectrum CALCulation in progress. |
 
-**Eksempel:**
+**Example:**
 
 ```
 STAT:OPER:PTR 5948
-STAT:OPER:PTR?      Respons: 5948
+STAT:OPER:PTR?      Response: 5948
 ```
 
-- **\*RST-tilstand:** 0
+- **\*RST state:** 0
 
 #### `STATus:OPERation:NTRansition <value>`
 
-**Beskrivelse:** Setter det negative transisjonsfilteret. Å sette en bit i det negative transisjonsfilteret gjør at en 1-til-0-overgang i tilhørende bit i det tilknyttede tilstandsregisteret fører til at 1 skrives i tilhørende bit i det tilknyttede hendelsesregisteret.
+**Description:** Sets the negative transition filter. Setting a bit in the negative transition filter causes a 1-to-0 transition in the corresponding bit of the associated condition register to write a 1 into the corresponding bit of the associated event register.
 
-**Parametre:**
+**Parameters:**
 
-| Bit | Betydning |
+| Bit | Meaning |
 |---|---|
-| bit 2 | Ranging (bytter måleområde). |
-| bit 3 | Sweeping (minneopptak pågår). |
-| bit 5 | Venter på trigger. |
-| bit 8 | Synkronisert (hvis sync-kilden endres, oppstår en glitch). |
-| bit 10 | Midling (midling pågår; ved slutten av hver midlingssyklus oppstår en glitch). |
-| bit 12 | Spektrum-CALCulation pågår. |
+| bit 2 | Ranging (changing measurement range). |
+| bit 3 | Sweeping (memory recording in progress). |
+| bit 5 | Waiting for trigger. |
+| bit 8 | Synchronized (if the sync source changes, a glitch occurs). |
+| bit 10 | Averaging (averaging in progress; at the end of each averaging cycle a glitch occurs). |
+| bit 12 | Spectrum CALCulation in progress. |
 
-**Eksempel:**
+**Example:**
 
 ```
 STAT:OPER:NTR 5948
-STAT:OPER:NTR?      Respons: 5948
+STAT:OPER:NTR?      Response: 5948
 ```
 
-- **\*RST-tilstand:** 0
+- **\*RST state:** 0
 
 #### `STATus:OPERation[:EVENt]?`
 
-**Beskrivelse:** Denne spørringen returnerer innholdet i hendelsesregisteret knyttet til statusstrukturen definert i kommandoen. Responsen er (NR1 NUMERIC RESPONSE DATA) (område: 0 til og med 32767). Merk at lesing av hendelsesregisteret nullstiller det.
+**Description:** This query returns the contents of the event register associated with the status structure defined in the command. The response is (NR1 NUMERIC RESPONSE DATA) (range: 0 through 32767). Note that reading the event register clears it.
 
-**Respons:** `<value>` er et 16-bits heltall i desimalnotasjon.
+**Response:** `<value>` is a 16-bit integer in decimal notation.
 
-| Bit | Betydning |
+| Bit | Meaning |
 |---|---|
-| bit 2 | Ranging (bytter måleområde). |
-| bit 3 | Sweeping (minneopptak pågår). |
-| bit 5 | Venter på trigger. |
-| bit 8 | Synkronisert (hvis sync-kilden endres, oppstår en glitch). |
-| bit 10 | Midling (midling pågår; ved slutten av hver midlingssyklus oppstår en glitch). |
-| bit 12 | Spektrum-CALCulation pågår. |
+| bit 2 | Ranging (changing measurement range). |
+| bit 3 | Sweeping (memory recording in progress). |
+| bit 5 | Waiting for trigger. |
+| bit 8 | Synchronized (if the sync source changes, a glitch occurs). |
+| bit 10 | Averaging (averaging in progress; at the end of each averaging cycle a glitch occurs). |
+| bit 12 | Spectrum CALCulation in progress. |
 
-**Eksempel:**
+**Example:**
 
 ```
-STAT:OPER?          Respons: 2 (bytter måleområde)
+STAT:OPER?          Response: 2 (changing measurement range)
 ```
 
-- **\*RST-tilstand:** Har ingen effekt.
+- **\*RST state:** Has no effect.
 
 #### `STATus:OPERation:ENABle <value>`
 
-**Beskrivelse:** Setter aktiveringsmasken som tillater at sanne tilstander i hendelsesregisteret rapporteres i sammendragsbiten. Hvis en bit er 1 i enable-registeret og den tilknyttede hendelsesbiten går til sann, inntreffer en positiv transisjon i den tilknyttede sammendragsbiten. Kommandoen aksepterer parameterverdier i begge formater i området 0 til og med 65535 (desimalt) uten feil. Spørringsresponsformatet er \<NR1\>.
+**Description:** Sets the enable mask that allows true conditions in the event register to be reported in the summary bit. If a bit is 1 in the enable register and the associated event bit goes true, a positive transition occurs in the associated summary bit. The command accepts parameter values in either format in the range 0 through 65535 (decimal) without error. The query response format is \<NR1\>.
 
-**Parametre:**
+**Parameters:**
 
-| Bit | Betydning |
+| Bit | Meaning |
 |---|---|
-| bit 2 | Ranging (bytter måleområde). |
-| bit 3 | Sweeping (minneopptak pågår). |
-| bit 5 | Venter på trigger. |
-| bit 8 | Synkronisert (hvis sync-kilden endres, oppstår en glitch). |
-| bit 10 | Midling (midling pågår; ved slutten av hver midlingssyklus oppstår en glitch). |
-| bit 12 | Spektrum-CALCulation pågår. |
+| bit 2 | Ranging (changing measurement range). |
+| bit 3 | Sweeping (memory recording in progress). |
+| bit 5 | Waiting for trigger. |
+| bit 8 | Synchronized (if the sync source changes, a glitch occurs). |
+| bit 10 | Averaging (averaging in progress; at the end of each averaging cycle a glitch occurs). |
+| bit 12 | Spectrum CALCulation in progress. |
 
-**Eksempel:**
+**Example:**
 
 ```
 STAT:OPER:ENAB 5948
-STAT:OPER:ENAB?     Respons: 5948
+STAT:OPER:ENAB?     Response: 5948
 ```
 
-- **\*RST-tilstand:** 0
+- **\*RST state:** 0
 
-## Hurtigreferanse: alle kommandoer
+## Quick reference: all commands
 
-Dette er en komplett oversikt over alle kommandoer i fjernstyrings-API-et, gruppert etter subsystem ("List of Commands Grouped by Subsystems" fra manualen). Tabellene viser kommandosyntaks, gyldige parametere og eventuelle merknader (fastvarekrav, opsjoner o.l.).
+This is a complete overview of all the commands in the remote control API, grouped by subsystem ("List of Commands Grouped by Subsystems" from the manual). The tables show command syntax, valid parameters and any notes (firmware requirements, options and so on).
 
-Konvensjoner:
+Conventions:
 
-- Store bokstaver i kommandonavnet angir SCPI-kortformen (f.eks. `CALCulate` kan skrives `CALC`).
-- Deler i hakeparentes `[...]` er valgfrie.
-- `|` skiller alternative verdier eller nøkkelord.
-- Merknaden **n. i.** betyr *Not Implemented* (ikke implementert).
+- Upper-case letters in the command name indicate the SCPI short form (e.g. `CALCulate` can be written `CALC`).
+- Parts in square brackets `[...]` are optional.
+- `|` separates alternative values or keywords.
+- The note **n. i.** means *Not Implemented*.
 
-### Felleskommandoer (IEEE 488.2)
+### Common commands (IEEE 488.2)
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `*CLS` | | |
 | `*ESE` | 0 to 255 | |
@@ -4030,13 +4028,13 @@ Konvensjoner:
 
 ### ABORt
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `ABORt` | | |
 
 ### CALCulate
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `CALCulate:TRANsform:FREQuency[:STATe]` | ONCE | |
 | `CALCulate:TRANsform:FREQuency:MODE` | FFT \| DFT \| STD | STD: FW V1.5 and up |
@@ -4064,14 +4062,14 @@ Konvensjoner:
 
 ### DISPlay
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `DISPlay[:WINDow][:STATe]` | ON \| OFF | |
 | `DISPlay:USER:FUNCtion` | `<function list>` | |
 
 ### FORMat
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `FORMat[:DATA]` | ASCii \| REAL, [0..8] \| [32 \| 64] | |
 | `FORMat[:DATA]:STATus` | ASCii \| INTeger, [8] \| 16 \| 32 | |
@@ -4080,13 +4078,13 @@ Konvensjoner:
 
 ### HCOPy
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `HCOPy:SDUMp:DATA?` | | |
 
 ### INITiate
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `INITiate:CONTinuous` | ON \| OFF | |
 | `INITiate[:IMMediate]` | | |
@@ -4095,7 +4093,7 @@ Konvensjoner:
 
 ### INPut
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `INPut[1..12]:COUPling` | AC \| DC | |
 | `INPut[1\|2\|3\|4\|5\|6\|7\|8\|9\|10\|11\|12]:GAIN` | 1.0e-7 to 1.0e+7 | |
@@ -4106,19 +4104,19 @@ Konvensjoner:
 
 ### OUTPut
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `OUTPut9[:STATe]` | ON \| OFF | |
 
 ### ROUTe
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `ROUTe:SYSTem` | "3W" \| "2W" | |
 
 ### SENSe
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `[SENSe:]CURRent[1..6]\|VOLTage[1..6]:AC\|[:DC]:RANGe[:UPPer]` | 0.3 to 1000.0 V, 0.03 to 10.0 A, 0.03 to 10 V | |
 | `[SENSe:]CURRent[1..6]\|VOLTage[1..6]:AC[\|:DC]:SCALe` | 0.9 to 1.0e+7 | |
@@ -4142,9 +4140,9 @@ Konvensjoner:
 | `[SENSe:]SWEep1\|2:SFACtor` | 1 to 65535 | |
 | `[SENSe:]SWEep1\|2:FUNCtion` | `<function list>` | |
 
-### SENSe2 (motor-/prosessgrensesnitt, Option PI1)
+### SENSe2 (motor/process interface, Option PI1)
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `SENSe2:TORQue[1..4]:VOLTage:SCALe` | -1e6 to 1e6 | Option PI1 |
 | `SENSe2:TORQue[1..4]:VOLTage:OFFSet[:VALue]` | -1e6 to 1e6 | Option PI1 |
@@ -4163,9 +4161,9 @@ Konvensjoner:
 | `SENSe2:POLepairs[1..4]` | 1 to 999 | Option PI1 |
 | `SENSe2:REFerence[1..4][:POWer]` | "POWer[1..6][:ACTive]" | Option PI1 |
 
-### SOURce (analoge utganger, Option PI1)
+### SOURce (analog outputs, Option PI1)
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `SOURce:VOLTage[1..4]:MODE` | FIXed \| VARiable | Option PI1 |
 | `SOURce:VOLTage[1..4][:LEVel][:IMMediate][:AMPLitude]` | -10.3 to 10.3 | Option PI1 |
@@ -4175,7 +4173,7 @@ Konvensjoner:
 
 ### SYNC
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `SYNC:STATe` | ON \| OFF | |
 | `SYNC:SOURce` | VOLTage[1..6] \| CURRent[1..6] \| EXTernal | |
@@ -4188,7 +4186,7 @@ Konvensjoner:
 
 ### TIMer
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `TIMer:RESet` | | |
 | `TIMer:RESet:AUTO` | ON \| OFF | n. i. |
@@ -4196,7 +4194,7 @@ Konvensjoner:
 
 ### TRACe
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `TRACe[:DATA]:PREamble?` | `<block>` | |
 | `TRACe[:DATA]?` | `[<block> [,<count> [,<offset> [,<sparsing>[,opt_level]]]]]` | |
@@ -4207,7 +4205,7 @@ Konvensjoner:
 
 ### TRIGger
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `TRIGger:STARt:SOURce` | BUS \| TIME \| IMMediate \| MANual \| SYNC \| `<function>` | |
 | `TRIGger:STARt:TIME` | yyyy,MM,dd,hh,mm,ss | |
@@ -4220,7 +4218,7 @@ Konvensjoner:
 
 ### SYSTem
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `SYSTem:COMMunicate:GPIB[:SELF]:ADDRess` | 1 to 30 | |
 | `SYSTem:COMMunicate:SERial:BAUD` | 1200 to 115200 | |
@@ -4234,7 +4232,7 @@ Konvensjoner:
 
 ### STATus
 
-| Kommando | Parameter | Merknad |
+| Command | Parameter | Note |
 |---|---|---|
 | `STATus:QUEStionable:VOLTage:CONDition?` | | |
 | `STATus:QUEStionable:VOLTage:PTRansition` | 0 to 65535 | |
@@ -4257,187 +4255,187 @@ Konvensjoner:
 | `STATus:OPERation[:EVENt]?` | | |
 | `STATus:OPERation:ENABle` | 0 to 65535 | |
 
-*n. i. – Not Implemented (ikke implementert).*
+*n. i. – Not Implemented.*
 
-## Statusrapporteringssystemet
+## The status reporting system
 
-### Innledning
+### Introduction
 
-Statusrapporteringssystemet lagrer all informasjon om instrumentets nåværende driftstilstand, for eksempel om feil som har oppstått. Informasjonen lagres i statusregistre og i en feilkø (error queue). Både statusregistrene og feilkøen kan spørres via IEC/IEEE-bussen.
+The status reporting system stores all information about the instrument's current operating state, for example about errors that have occurred. The information is stored in status registers and in an error queue. Both the status registers and the error queue can be queried over the IEC/IEEE bus.
 
-Informasjonen er hierarkisk strukturert:
+The information is structured hierarchically:
 
-- Det høyeste nivået utgjøres av statusbyten (**STB**, Status Byte) definert i IEEE 488.2, med tilhørende maskeregister **SRE** (Service Request Enable).
-- STB mottar informasjon fra det standardiserte **ESR** (Event Status Register), også definert i IEEE 488.2, med tilhørende maskeregister **ESE** (Event Status Enable).
-- STB mottar i tillegg informasjon fra registrene **STATus:OPERation** og **STATus:QUEStionable**, som er definert av SCPI og inneholder detaljert informasjon om instrumentet.
+- The highest level is the status byte (**STB**, Status Byte) defined in IEEE 488.2, with its associated mask register **SRE** (Service Request Enable).
+- The STB receives information from the standardized **ESR** (Event Status Register), also defined in IEEE 488.2, with its associated mask register **ESE** (Event Status Enable).
+- The STB additionally receives information from the **STATus:OPERation** and **STATus:QUEStionable** registers, which are defined by SCPI and contain detailed information about the instrument.
 
-Utgangsbufferet (output buffer) inneholder meldingene instrumentet returnerer til kontrolleren. Utgangsbufferet er ikke en del av statusrapporteringssystemet, men bestemmer verdien av MAV-biten i STB-registeret.
+The output buffer contains the messages the instrument returns to the controller. The output buffer is not part of the status reporting system, but it determines the value of the MAV bit in the STB register.
 
-### Oppbygning av et SCPI-statusregister
+### Structure of a SCPI status register
 
-Hvert SCPI-register består av fem deler, hver 16 bit bred, med ulike funksjoner. De enkelte bitene er uavhengige av hverandre. Hver maskinvarestatus er tilordnet et bitnummer som gjelder for alle fem delene. For eksempel er bit 3 i STATus:OPERation-registeret tilordnet maskinvarestatusen "Wait for trigger" i alle fem delene. Bit 15 (den mest signifikante biten) settes til null i alle fem delene, slik at kontrolleren kan behandle registerinnholdet som et positivt heltall.
+Each SCPI register consists of five parts, each 16 bits wide, with different functions. The individual bits are independent of each other. Each hardware status is assigned a bit number that applies to all five parts. For example, bit 3 in the STATus:OPERation register is assigned the hardware status "Wait for trigger" in all five parts. Bit 15 (the most significant bit) is set to zero in all five parts, so that the controller can treat the register contents as a positive integer.
 
-#### CONDition-delen
+#### The CONDition part
 
-CONDition-delen skrives direkte til av maskinvaren eller av sum-biten fra det neste lavere registeret. Innholdet gjenspeiler instrumentets nåværende status. Denne registerdelen kan bare leses, ikke skrives til eller nullstilles. Lesing påvirker ikke innholdet.
+The CONDition part is written to directly by the hardware or by the sum bit from the next lower register. Its contents reflect the instrument's current status. This register part can only be read, not written to or cleared. Reading does not affect the contents.
 
-#### PTRansition-delen
+#### The PTRansition part
 
-PTRansition-delen (Positive Transition) fungerer som en flankedetektor. Hvis en bit i CONDition-delen endres fra 0 til 1, avgjør tilstanden til den tilhørende PTR-biten om EVENt-biten settes til 1:
+The PTRansition part (Positive Transition) acts as an edge detector. If a bit in the CONDition part changes from 0 to 1, the state of the corresponding PTR bit determines whether the EVENt bit is set to 1:
 
-- PTR-bit = 1: EVENt-biten settes.
-- PTR-bit = 0: EVENt-biten settes ikke.
+- PTR bit = 1: the EVENt bit is set.
+- PTR bit = 0: the EVENt bit is not set.
 
-Denne delen kan både skrives til og leses. Lesing påvirker ikke innholdet.
+This part can be both written to and read. Reading does not affect the contents.
 
-#### NTRansition-delen
+#### The NTRansition part
 
-NTRansition-delen (Negative Transition) fungerer likeledes som en flankedetektor. Hvis en bit i CONDition-delen endres fra 1 til 0, avgjør tilstanden til den tilhørende NTR-biten om EVENt-biten settes til 1:
+The NTRansition part (Negative Transition) likewise acts as an edge detector. If a bit in the CONDition part changes from 1 to 0, the state of the corresponding NTR bit determines whether the EVENt bit is set to 1:
 
-- NTR-bit = 1: EVENt-biten settes.
-- NTR-bit = 0: EVENt-biten settes ikke.
+- NTR bit = 1: the EVENt bit is set.
+- NTR bit = 0: the EVENt bit is not set.
 
-Denne delen kan både skrives til og leses. Lesing påvirker ikke innholdet.
+This part can be both written to and read. Reading does not affect the contents.
 
-Med disse to flankeregisterdelene kan brukeren definere hvilken statusovergang i CONDition-delen (ingen, 0 til 1, 1 til 0 eller begge) som skal lagres i EVENt-delen.
+With these two edge register parts, the user can define which status transition in the CONDition part (none, 0 to 1, 1 to 0 or both) is to be stored in the EVENt part.
 
-#### EVENt-delen
+#### The EVENt part
 
-EVENt-delen angir om en hendelse har inntruffet siden den sist ble lest; den er "hukommelsen" til CONDition-delen. Den viser kun de hendelsene som er sluppet gjennom av flankefiltrene. EVENt-delen oppdateres kontinuerlig av instrumentet. Denne delen kan bare leses. Ved lesing nullstilles innholdet. I dagligtale omtales EVENt-delen ofte som synonymt med hele registeret.
+The EVENt part states whether an event has occurred since it was last read; it is the "memory" of the CONDition part. It shows only the events passed by the edge filters. The EVENt part is updated continuously by the instrument. This part can only be read. Reading clears its contents. In everyday use the EVENt part is often referred to as synonymous with the whole register.
 
-#### ENABle-delen
+#### The ENABle part
 
-ENABle-delen bestemmer om den tilhørende EVENt-biten bidrar til sum-biten (se nedenfor). Hver bit i EVENt-delen AND-es med den tilhørende ENABle-biten (symbol &). Resultatene av alle logiske operasjoner i denne delen føres videre til sum-biten via en OR-funksjon (symbol +):
+The ENABle part determines whether the corresponding EVENt bit contributes to the sum bit (see below). Each bit in the EVENt part is ANDed with the corresponding ENABle bit (symbol &). The results of all the logical operations in this part are passed on to the sum bit via an OR function (symbol +):
 
-- ENABle-bit = 0: den tilhørende EVENt-biten bidrar ikke til sum-biten.
-- ENABle-bit = 1: hvis den tilhørende EVENt-biten er 1, settes sum-biten også til 1.
+- ENABle bit = 0: the corresponding EVENt bit does not contribute to the sum bit.
+- ENABle bit = 1: if the corresponding EVENt bit is 1, the sum bit is also set to 1.
 
-Denne delen kan både skrives til og leses. Lesing påvirker ikke innholdet.
+This part can be both written to and read. Reading does not affect the contents.
 
-#### Sum-biten
+#### The sum bit
 
-Sum-biten dannes, som nevnt over, fra EVENt-delen og ENABle-delen for hvert register. Resultatet føres inn som en bit i CONDition-delen i det neste høyere registeret.
+The sum bit is formed, as mentioned above, from the EVENt part and the ENABle part of each register. The result is entered as a bit in the CONDition part of the next higher register.
 
-Instrumentet genererer automatisk en sum-bit for hvert register. Dermed er det sikret at en hendelse, for eksempel en PLL som ikke har låst, kan utløse en service request gjennom alle hierarkiske nivåer.
+The instrument generates a sum bit for each register automatically. This ensures that an event, for example a PLL that has not locked, can trigger a service request through all hierarchical levels.
 
-> **Merk:** Service request enable-registeret (SRE) definert i IEEE 488.2 kan betraktes som ENABle-delen av STB når STB er strukturert i samsvar med SCPI. Tilsvarende kan ESE betraktes som ENABle-delen av ESR.
+> **Note:** The service request enable register (SRE) defined in IEEE 488.2 can be regarded as the ENABle part of the STB when the STB is structured in accordance with SCPI. Likewise, the ESE can be regarded as the ENABle part of the ESR.
 
-### Oversikt over statusregistrene
+### Overview of the status registers
 
-Hierarkiet i statusrapporteringsstrukturen (minimumsstrukturen som kreves av SCPI) er som følger:
+The hierarchy of the status reporting structure (the minimum structure required by SCPI) is as follows:
 
-- **Status Byte (STB)** — øverste nivå. Mottar sum-biter fra:
+- **Status Byte (STB)** — the top level. Receives sum bits from:
   - **Standard Event Status Register (ESR)** — bit 0 Operation Complete, bit 1 Not used, bit 2 Query Error, bit 3 Device Dependent Error, bit 4 Execution Error, bit 5 Command Error, bit 6 User Request, bit 7 Power On.
-  - **OPERation Status**-registeret — bit 0–1 Reserved, bit 2 RANGing, bit 3 SWEeping, bit 4 MEASuring, bit 5 Waiting for TRIGger Summary, bit 6–7 Reserved, bit 8 SYNChronized, bit 9 Sync available (reserved), bit 10 Averaging, bit 11 Reserved, bit 12 CALCulation, bit 13–14 Reserved, bit 15 NOT USED*.
-  - **QUEStionable Status**-registeret — som igjen mottar sum-biter fra underregistrene:
-    - **QUEStionable:CURRent** — bit 0–5 INPut1/3/5/7/9/11 overload, bit 6–7 Reserved, bit 8–13 INPut1/3/5/7/9/11 underload, bit 14 Reserved, bit 15 NOT USED*.
-    - **QUEStionable:VOLTage** — bit 0–5 INPut2/4/6/8/10/12 overload, bit 6–7 Reserved, bit 8–13 INPut2/4/6/8/10/12 underload, bit 14 Reserved, bit 15 NOT USED*.
-  - **Error/Event Queue** (feilkøen) — styrer bit 2 i STB.
-  - **Output Buffer** (utgangsbufferet) — styrer MAV-biten i STB.
+  - The **OPERation Status** register — bits 0–1 Reserved, bit 2 RANGing, bit 3 SWEeping, bit 4 MEASuring, bit 5 Waiting for TRIGger Summary, bits 6–7 Reserved, bit 8 SYNChronized, bit 9 Sync available (reserved), bit 10 Averaging, bit 11 Reserved, bit 12 CALCulation, bits 13–14 Reserved, bit 15 NOT USED*.
+  - The **QUEStionable Status** register — which in turn receives sum bits from the sub-registers:
+    - **QUEStionable:CURRent** — bits 0–5 INPut1/3/5/7/9/11 overload, bits 6–7 Reserved, bits 8–13 INPut1/3/5/7/9/11 underload, bit 14 Reserved, bit 15 NOT USED*.
+    - **QUEStionable:VOLTage** — bits 0–5 INPut2/4/6/8/10/12 overload, bits 6–7 Reserved, bits 8–13 INPut2/4/6/8/10/12 underload, bit 14 Reserved, bit 15 NOT USED*.
+  - The **Error/Event Queue** — controls bit 2 in the STB.
+  - The **Output Buffer** — controls the MAV bit in the STB.
 
-Bit 6 i STB er RQS/MSS (utløser SRQ på bussen).
+Bit 6 in the STB is RQS/MSS (triggers SRQ on the bus).
 
-\* Bruk av bit 15 er ikke tillatt, siden enkelte kontrollere kan ha problemer med å lese et 16-bits heltall uten fortegn. Verdien av denne biten skal alltid være 0.
+\* Use of bit 15 is not permitted, since some controllers may have problems reading an unsigned 16-bit integer. The value of this bit must always be 0.
 
-### Beskrivelse av statusregistrene
+### Description of the status registers
 
-#### Status Byte (STB) og Service Request Enable Register (SRE)
+#### Status Byte (STB) and Service Request Enable Register (SRE)
 
-STB er definert i IEEE 488.2. Det gir en grov oversikt over instrumentstatusen ved å samle informasjonen fra de lavere registrene. Det kan sammenlignes med CONDition-delen av et SCPI-register og utgjør det høyeste nivået i SCPI-hierarkiet. En spesiell egenskap er at bit 6 fungerer som sum-bit for de øvrige bitene i statusbyten.
+The STB is defined in IEEE 488.2. It gives a rough overview of the instrument status by collecting the information from the lower registers. It can be compared to the CONDition part of a SCPI register and constitutes the highest level in the SCPI hierarchy. A special feature is that bit 6 acts as the sum bit for the other bits in the status byte.
 
-Statusbyten leses med kommandoen `*STB?` eller via serial poll.
+The status byte is read with the command `*STB?` or via a serial poll.
 
-STB har et tilhørende SRE. SRE tilsvarer funksjonelt ENABle-delen i SCPI-registrene. Hver bit i STB er tilordnet en bit i SRE. Bit 6 i SRE ignoreres. Hvis en bit er satt i SRE og den tilhørende biten i STB endres fra 0 til 1, genereres en service request (SRQ) på IEC/IEEE-bussen, som utløser et interrupt i kontrolleren (hvis kontrolleren er konfigurert for det) og kan viderebehandles der.
+The STB has an associated SRE. The SRE corresponds functionally to the ENABle part of the SCPI registers. Each bit in the STB is assigned a bit in the SRE. Bit 6 in the SRE is ignored. If a bit is set in the SRE and the corresponding bit in the STB changes from 0 to 1, a service request (SRQ) is generated on the IEC/IEEE bus, which triggers an interrupt in the controller (if the controller is configured for it) and can be processed further there.
 
-SRE settes med kommandoen `*SRE` og leses med kommandoen `*SRE?`.
+The SRE is set with the command `*SRE` and read with the command `*SRE?`.
 
-**Tabell 2-1. Status Register Bits**
+**Table 2-1. Status Register Bits**
 
-| Bit nr. | Beskrivelse |
+| Bit no. | Description |
 |---|---|
-| 2 | **Error Queue Not Empty** — Denne biten settes når det gjøres en oppføring i feilkøen. Hvis biten er aktivert via SRE, genererer hver oppføring i feilkøen en service request. En feil kan da gjenkjennes og undersøkes nærmere ved å spørre feilkøen. Spørringen gir en informativ feilmelding. Denne fremgangsmåten anbefales, siden den reduserer problemene ved IEC/IEEE-buss-styring. |
-| 3 | **QUEStionable Status sum bit** — Denne biten settes hvis en EVENt-bit er satt i QUEStionable-statusregisteret og den tilhørende ENABle-biten er satt til 1. En satt bit indikerer en tvilsom (questionable) instrumenttilstand som kan undersøkes nærmere ved å spørre QUEStionable-statusregisteret. |
-| 4 | **MAV bit (Message AVailable)** — Denne biten settes hvis det finnes en melding i utgangsbufferet som kan leses. Biten kan brukes til automatisk lesing av data fra instrumentet til kontrolleren (se kapittelet med programeksempler, kapittel 6 i manualen). |
-| 5 | **ESB bit** — Sum-bit for event status-registeret. Den settes hvis en av bitene i event status-registeret er satt og aktivert i event status enable-registeret. En satt bit indikerer en alvorlig feil som kan undersøkes nærmere ved å spørre event status-registeret. |
-| 6 | **MSS bit (Master Status Summary bit)** — Denne biten settes hvis instrumentet utløser en service request. Det skjer når en av de andre bitene i registeret er satt sammen med sin maskebit i service request enable-registeret (SRE). |
-| 7 | **OPERation Status Register sum bit** — Denne biten settes hvis en EVENt-bit er satt i OPERation-statusregisteret og den tilhørende ENABle-biten er satt til 1. En satt bit indikerer at instrumentet utfører en handling. Typen handling kan bestemmes ved å spørre OPERation-statusregisteret. |
+| 2 | **Error Queue Not Empty** — This bit is set when an entry is made in the error queue. If the bit is enabled via the SRE, every entry in the error queue generates a service request. An error can then be recognized and investigated further by querying the error queue. The query gives an informative error message. This approach is recommended, since it reduces the problems of IEC/IEEE bus control. |
+| 3 | **QUEStionable Status sum bit** — This bit is set if an EVENt bit is set in the QUEStionable status register and the corresponding ENABle bit is set to 1. A set bit indicates a questionable instrument state that can be investigated further by querying the QUEStionable status register. |
+| 4 | **MAV bit (Message AVailable)** — This bit is set if there is a message in the output buffer that can be read. The bit can be used for automatic reading of data from the instrument to the controller (see the program examples chapter, chapter 6 in the manual). |
+| 5 | **ESB bit** — Sum bit for the event status register. It is set if one of the bits in the event status register is set and enabled in the event status enable register. A set bit indicates a serious error that can be investigated further by querying the event status register. |
+| 6 | **MSS bit (Master Status Summary bit)** — This bit is set if the instrument triggers a service request. That happens when one of the other bits in the register is set together with its mask bit in the service request enable register (SRE). |
+| 7 | **OPERation Status Register sum bit** — This bit is set if an EVENt bit is set in the OPERation status register and the corresponding ENABle bit is set to 1. A set bit indicates that the instrument is performing an action. The type of action can be determined by querying the OPERation status register. |
 
-#### Event Status Register (ESR) og Event Status Enable Register (ESE)
+#### Event Status Register (ESR) and Event Status Enable Register (ESE)
 
-ESR er definert i IEEE 488.2. Det kan sammenlignes med EVENt-delen av et SCPI-register. Event status-registeret leses med kommandoen `*ESR?`. ESE er den tilhørende ENABle-delen. Det settes med kommandoen `*ESE` og leses med kommandoen `*ESE?`.
+The ESR is defined in IEEE 488.2. It can be compared to the EVENt part of a SCPI register. The event status register is read with the command `*ESR?`. The ESE is the corresponding ENABle part. It is set with the command `*ESE` and read with the command `*ESE?`.
 
-**Tabell 2-2. Event Status Register Bits**
+**Table 2-2. Event Status Register Bits**
 
-| Bit nr. | Beskrivelse |
+| Bit no. | Description |
 |---|---|
-| 0 | **Operation Complete** — Denne biten settes ved mottak av kommandoen `*OPC` når alle foregående kommandoer er utført. |
-| 1 | Denne biten brukes ikke. |
-| 2 | **Query Error** — Denne biten settes hvis kontrolleren vil lese data fra instrumentet uten å ha sendt en spørring, eller hvis den ikke henter forespurte data og i stedet sender nye instruksjoner til instrumentet. Årsaken er ofte en feilaktig spørring som dermed ikke kan utføres. |
-| 3 | **Device-Dependent Error** — Denne biten settes hvis en enhetsavhengig feil oppstår. En feilmelding med et nummer mellom -300 og -399, eller et positivt feilnummer som beskriver feilen nærmere, legges inn i feilkøen (se kapittel 5 i manualen). |
-| 4 | **Execution Error** — Denne biten settes hvis en mottatt kommando er syntaktisk korrekt, men ikke kan utføres av andre grunner. En feilmelding med et nummer mellom -200 og -300, som beskriver feilen nærmere, legges inn i feilkøen (se kapittel 5 i manualen). |
-| 5 | **Command Error** — Denne biten settes hvis det mottas en kommando som er udefinert eller syntaktisk ukorrekt. En feilmelding med et nummer mellom -100 og -200, som beskriver feilen nærmere, legges inn i feilkøen (se kapittel 5 i manualen). |
-| 6 | **User Request** — Denne biten settes når [LOCAL]-tasten trykkes og instrumentet settes i manuell styring. (Manualen angir også at denne biten ikke brukes.) |
-| 7 | **Power On (AC supply voltage On)** — Denne biten settes når instrumentet slås på. |
+| 0 | **Operation Complete** — This bit is set on receipt of the command `*OPC` when all preceding commands have been executed. |
+| 1 | This bit is not used. |
+| 2 | **Query Error** — This bit is set if the controller wants to read data from the instrument without having sent a query, or if it does not fetch requested data and instead sends new instructions to the instrument. The cause is often an erroneous query that consequently cannot be executed. |
+| 3 | **Device-Dependent Error** — This bit is set if a device-dependent error occurs. An error message with a number between -300 and -399, or a positive error number describing the error in more detail, is entered in the error queue (see chapter 5 in the manual). |
+| 4 | **Execution Error** — This bit is set if a received command is syntactically correct but cannot be executed for other reasons. An error message with a number between -200 and -300, describing the error in more detail, is entered in the error queue (see chapter 5 in the manual). |
+| 5 | **Command Error** — This bit is set if a command is received that is undefined or syntactically incorrect. An error message with a number between -100 and -200, describing the error in more detail, is entered in the error queue (see chapter 5 in the manual). |
+| 6 | **User Request** — This bit is set when the [LOCAL] key is pressed and the instrument is put into manual control. (The manual also states that this bit is not used.) |
+| 7 | **Power On (AC supply voltage On)** — This bit is set when the instrument is switched on. |
 
-#### STATus:OPERation-registeret
+#### The STATus:OPERation register
 
-I CONDition-delen inneholder dette registeret informasjon om hvilke handlinger instrumentet er i ferd med å utføre, og i EVENt-delen informasjon om hvilke handlinger instrumentet har utført siden siste lesing. Registeret leses med kommandoene:
+In its CONDition part this register contains information about which actions the instrument is currently performing, and in its EVENt part information about which actions the instrument has performed since the last read. The register is read with the commands:
 
 ```
 STATus:OPERation:CONDition?
 STATus:OPERation[:EVENt]?
 ```
 
-**Tabell 2-3. STATus:OPERation Register Bits**
+**Table 2-3. STATus:OPERation Register Bits**
 
-| Bit nr. | Beskrivelse |
+| Bit no. | Description |
 |---|---|
-| 0 til 1 | Disse bitene brukes ikke. |
-| 2 | **RANGing** — Denne biten er satt mens instrumentet skifter måleområde på inngangskanalene i autorange-modus. |
-| 3 | **SWEeping** — Når minneopptak (memory recording) pågår, settes denne biten til 1. Under fylling av pretrigger eller mens instrumentet venter på trigger, er biten ikke satt. |
-| 4 | Brukes ikke. |
-| 5 | **Waiting for TRIGger Summary** — Når minneopptak venter på trigger etter at det er startet med `INITiate[:IMMediate]:SEQuence1` eller `INITiate:CONTinuous:SEQuence1 ON`, er denne biten satt. Den nullstilles når triggeren ankommer. |
-| 6 til 7 | Disse bitene brukes ikke. |
-| 8 | **SYNChronized** — Denne biten settes når instrumentet er synkronisert til en gyldig SYNC-kilde. Biten settes til 0 når `SYNC:STATe` settes til OFF. |
-| 9 | **SYNChronization Available (reserved)** — Denne biten settes hvis det finnes et gyldig synkroniseringssignal på minst én inngangskanal. (Manualen angir også at denne biten ikke brukes.) |
-| 10 | **AVERaging** — Denne biten settes når instrumentet behandler sin midlingssyklus (averaging cycle). I free-run-modus settes biten til 0 i et kort tidsrom ved slutten av hver midlingssyklus. |
-| 11 | Denne biten brukes ikke. |
-| 12 | **CALCulation** — Denne biten settes til 1 hvis beregningen pågår. Når beregningen er fullført, settes biten til 0. |
-| 13 til 14 | Disse bitene brukes ikke. |
-| 15 | Denne biten er alltid 0. |
+| 0 to 1 | These bits are not used. |
+| 2 | **RANGing** — This bit is set while the instrument is changing the measurement range on the input channels in autorange mode. |
+| 3 | **SWEeping** — When memory recording is in progress, this bit is set to 1. While the pretrigger is being filled or while the instrument is waiting for a trigger, the bit is not set. |
+| 4 | Not used. |
+| 5 | **Waiting for TRIGger Summary** — When memory recording is waiting for a trigger after being started with `INITiate[:IMMediate]:SEQuence1` or `INITiate:CONTinuous:SEQuence1 ON`, this bit is set. It is cleared when the trigger arrives. |
+| 6 to 7 | These bits are not used. |
+| 8 | **SYNChronized** — This bit is set when the instrument is synchronized to a valid SYNC source. The bit is set to 0 when `SYNC:STATe` is set to OFF. |
+| 9 | **SYNChronization Available (reserved)** — This bit is set if a valid synchronization signal is present on at least one input channel. (The manual also states that this bit is not used.) |
+| 10 | **AVERaging** — This bit is set when the instrument is processing its averaging cycle. In free-run mode the bit is set to 0 for a short period at the end of each averaging cycle. |
+| 11 | This bit is not used. |
+| 12 | **CALCulation** — This bit is set to 1 if the computation is in progress. When the computation is complete, the bit is set to 0. |
+| 13 to 14 | These bits are not used. |
+| 15 | This bit is always 0. |
 
-#### STATus:QUEStionable-registeret
+#### The STATus:QUEStionable register
 
-Dette registeret inneholder informasjon om ubestemte tilstander som kan oppstå hvis enheten brukes utenfor spesifikasjonene. Det kan spørres med kommandoene:
+This register contains information about indeterminate states that can arise if the unit is used outside its specifications. It can be queried with the commands:
 
 ```
 STATus:QUEStionable:CONDition?
 STATus:QUEStionable[:EVENt]?
 ```
 
-**Tabell 2-4. STATus:QUEStionable Register Bits**
+**Table 2-4. STATus:QUEStionable Register Bits**
 
-| Bit nr. | Beskrivelse |
+| Bit no. | Description |
 |---|---|
 | 0 | QUEStionable:VOLTage Register Summary. |
 | 1 | QUEStionable:CURRent Register Summary. |
-| 2 til 4 | Disse bitene brukes ikke. |
-| 5 | **FREQuency** — Biten settes hvis frekvensmålingen er ugyldig på grunn av dårlig signalkvalitet. |
-| 6 til 14 | Disse bitene brukes ikke. |
-| 15 | Denne biten er alltid 0. |
+| 2 to 4 | These bits are not used. |
+| 5 | **FREQuency** — The bit is set if the frequency measurement is invalid because of poor signal quality. |
+| 6 to 14 | These bits are not used. |
+| 15 | This bit is always 0. |
 
-#### STATus:QUEStionable:CURRent-registeret
+#### The STATus:QUEStionable:CURRent register
 
-Dette registeret inneholder informasjon om overload-/underload-tilstander som kan oppstå hvis måleområdet på en strøminngangskanal overskrides eller inngangssignalet er for lavt. Det kan spørres med kommandoene:
+This register contains information about overload/underload conditions that can arise if the measurement range on a current input channel is exceeded or the input signal is too low. It can be queried with the commands:
 
 ```
 STATus:QUEStionable:CURRent:CONDition?
 STATus:QUEStionable:CURRent[:EVENt]?
 ```
 
-**Tabell 2-5. STATus:QUEStionable:CURRent Register Bits**
+**Table 2-5. STATus:QUEStionable:CURRent Register Bits**
 
-| Bit nr. | Beskrivelse |
+| Bit no. | Description |
 |---|---|
 | 0 | INPut1 OVERrange |
 | 1 | INPut3 OVERrange |
@@ -4445,28 +4443,28 @@ STATus:QUEStionable:CURRent[:EVENt]?
 | 3 | INPut7 OVERrange |
 | 4 | INPut9 OVERrange |
 | 5 | INPut11 OVERrange |
-| 6 til 7 | Disse bitene brukes ikke. |
+| 6 to 7 | These bits are not used. |
 | 8 | INPut1 UNDERrange |
 | 9 | INPut3 UNDERrange |
 | 10 | INPut5 UNDERrange |
 | 11 | INPut7 UNDERrange |
 | 12 | INPut9 UNDERrange |
 | 13 | INPut11 UNDERrange |
-| 14 | Denne biten brukes ikke. |
-| 15 | Denne biten er alltid 0. |
+| 14 | This bit is not used. |
+| 15 | This bit is always 0. |
 
-#### STATus:QUEStionable:VOLTage-registeret
+#### The STATus:QUEStionable:VOLTage register
 
-Dette registeret inneholder informasjon om overload-/underload-tilstander som kan oppstå hvis måleområdet på en spenningsinngangskanal overskrides eller inngangssignalet er for lavt. Det kan spørres med kommandoene:
+This register contains information about overload/underload conditions that can arise if the measurement range on a voltage input channel is exceeded or the input signal is too low. It can be queried with the commands:
 
 ```
 STATus:QUEStionable:VOLTage:CONDition?
 STATus:QUEStionable:VOLTage[:EVENt]?
 ```
 
-**Tabell 2-6. STATus:QUEStionable:VOLTage Register Bits**
+**Table 2-6. STATus:QUEStionable:VOLTage Register Bits**
 
-| Bit nr. | Beskrivelse |
+| Bit no. | Description |
 |---|---|
 | 0 | INPut2 OVERrange |
 | 1 | INPut4 OVERrange |
@@ -4474,221 +4472,221 @@ STATus:QUEStionable:VOLTage[:EVENt]?
 | 3 | INPut8 OVERrange |
 | 4 | INPut10 OVERrange |
 | 5 | INPut12 OVERrange |
-| 6 til 7 | Disse bitene brukes ikke. |
+| 6 to 7 | These bits are not used. |
 | 8 | INPut2 UNDERrange |
 | 9 | INPut4 UNDERrange |
 | 10 | INPut6 UNDERrange |
 | 11 | INPut8 UNDERrange |
 | 12 | INPut10 UNDERrange |
 | 13 | INPut12 UNDERrange |
-| 14 | Denne biten brukes ikke. |
-| 15 | Denne biten er alltid 0. |
+| 14 | This bit is not used. |
+| 15 | This bit is always 0. |
 
-### Praktisk bruk av statusrapporteringssystemet
+### Practical use of the status reporting system
 
-For å bruke statusrapporteringssystemet effektivt må informasjonen som ligger der overføres til kontrolleren og viderebehandles der. Det finnes flere metoder, beskrevet nedenfor. Detaljerte programeksempler finnes i kapittel 6 i manualen.
+To use the status reporting system effectively, the information it holds must be transferred to the controller and processed further there. There are several methods, described below. Detailed program examples are found in chapter 6 of the manual.
 
-#### Service request — bruk av hierarkistrukturen (kun GPIB)
+#### Service request — using the hierarchical structure (GPIB only)
 
-Under visse omstendigheter kan instrumentet sende en service request (SRQ) til kontrolleren. Vanligvis utløser denne service requesten et interrupt i kontrolleren, som styreprogrammet kan reagere på med passende handlinger. En SRQ utløses alltid når én eller flere av bitene 2, 3, 4, 5 eller 7 i statusbyten er satt og aktivert i SRE. Hver av disse bitene sammenfatter informasjonen fra et underliggende register, feilkøen eller utgangsbufferet. Ved passende innstilling av ENABle-delene i statusregistrene kan man oppnå at vilkårlige biter i et vilkårlig statusregister utløser en SRQ. For å utnytte mulighetene i service request fullt ut, bør alle biter settes til 1 i enable-registrene SRE og ESE.
+Under certain circumstances the instrument can send a service request (SRQ) to the controller. Normally this service request triggers an interrupt in the controller, which the control program can respond to with appropriate actions. An SRQ is always triggered when one or more of bits 2, 3, 4, 5 or 7 in the status byte are set and enabled in the SRE. Each of these bits summarizes the information from an underlying register, the error queue or the output buffer. By setting the ENABle parts of the status registers appropriately, you can arrange for arbitrary bits in an arbitrary status register to trigger an SRQ. To exploit the possibilities of the service request fully, all bits should be set to 1 in the enable registers SRE and ESE.
 
-**Eksempel: bruk av kommandoen `*OPC` for å generere en SRQ.** Mens programmet venter på SRQ, kan det utføre andre oppgaver:
+**Example: using the `*OPC` command to generate an SRQ.** While the program waits for the SRQ, it can perform other tasks:
 
-- Sett bit 0 i ESE (Operation Complete)
-- Sett bit 5 i SRE (ESB)
+- Set bit 0 in the ESE (Operation Complete)
+- Set bit 5 in the SRE (ESB)
 
-Når innstillingene er fullført, genererer instrumentet en SRQ.
+Once the settings are complete, the instrument generates an SRQ.
 
-SRQ er den eneste muligheten instrumentet har til å bli aktivt på eget initiativ. Ethvert kontrollerprogram bør konfigurere instrumentet slik at en service request utløses ved feilfunksjon, og programmet bør reagere hensiktsmessig på den. Et detaljert eksempel på en service request-rutine finnes i kapittel 6 i manualen.
+The SRQ is the only way the instrument can become active on its own initiative. Every controller program should configure the instrument so that a service request is triggered on a malfunction, and the program should respond to it appropriately. A detailed example of a service request routine is found in chapter 6 of the manual.
 
-**Eksempel: indikere slutten på en midlingssyklus med en SRQ via bit 10 i STATus:OPERation-registeret.** Mens programmet venter på SRQ, kan det utføre andre oppgaver:
+**Example: indicating the end of an averaging cycle with an SRQ via bit 10 of the STATus:OPERation register.** While the program waits for the SRQ, it can perform other tasks:
 
-- Sett bit 7 i SRE (sum-bit for STATus:OPERation-registeret)
-- Sett bit 10 i STATus:OPERation:ENABle-registeret (Averaging)
-- Sett bit 10 i STATus:OPERation:NTRansition for å sikre at overgangen for averaging-bit 10 fra 1 til 0 (Averaging) også lagres i EVENt-registeret. Kall av `*CLS`-kommandoen setter alle biter i NTRansition og PTRansition til 1, slik at enhver bitendring registreres. Å aktivere enable-biten, i dette tilfellet bit 10, vil normalt være tilstrekkelig.
+- Set bit 7 in the SRE (sum bit for the STATus:OPERation register)
+- Set bit 10 in the STATus:OPERation:ENABle register (Averaging)
+- Set bit 10 in STATus:OPERation:NTRansition to ensure that the transition of averaging bit 10 from 1 to 0 (Averaging) is also stored in the EVENt register. Calling the `*CLS` command sets all bits in NTRansition and PTRansition to 1, so that every bit change is registered. Enabling the enable bit, in this case bit 10, will normally be sufficient.
 
-Når midlingssyklusen er fullført, genererer instrumentet en SRQ.
+When the averaging cycle is complete, the instrument generates an SRQ.
 
-#### Serial poll (kun GPIB)
+#### Serial poll (GPIB only)
 
-Ved serial poll spørres statusbyten til et instrument, akkurat som med kommandoen `*STB?`. Spørringen realiseres imidlertid via grensesnittmeldinger (interface messages) og er raskere. Serial poll-metoden er definert allerede i IEEE 488.1 og var tidligere den eneste standardiserte muligheten for å polle statusbyten på tvers av ulike instrumenter. Metoden fungerer også med instrumenter som ikke følger SCPI eller IEEE 488.2.
+With a serial poll, the status byte of an instrument is queried, just as with the `*STB?` command. The query is, however, realized via interface messages and is faster. The serial poll method was already defined in IEEE 488.1 and used to be the only standardized way of polling the status byte across different instruments. The method also works with instruments that do not follow SCPI or IEEE 488.2.
 
-VISA-funksjonen for å utføre serial poll er `viReadSTB`. Serial poll brukes hovedsakelig for å få en rask oversikt over tilstanden til flere instrumenter koblet til IEC-bussen (GPIB).
+The VISA function for performing a serial poll is `viReadSTB`. Serial poll is mainly used to get a quick overview of the state of several instruments connected to the IEC bus (GPIB).
 
-#### Spørring via kommandoer
+#### Querying with commands
 
-Hver del av hvert statusregister kan leses med spørringer (queries). De enkelte kommandoene er angitt i den detaljerte beskrivelsen av statusregistrene over. Det som returneres er alltid et tall som representerer bitmønsteret i registeret som spørres. Evaluering av dette tallet gjøres av kontrollerprogrammet.
+Every part of every status register can be read with queries. The individual commands are given in the detailed description of the status registers above. What is returned is always a number representing the bit pattern in the register queried. Evaluation of this number is done by the controller program.
 
-Spørringer brukes vanligvis etter en SRQ for å få mer detaljert informasjon om årsaken til SRQ-en.
+Queries are normally used after an SRQ to get more detailed information about the cause of the SRQ.
 
-#### Error-queue-spørring
+#### Querying the error queue
 
-Hver feiltilstand i instrumentet fører til en oppføring i feilkøen. Oppføringene i feilkøen er detaljerte feilmeldinger i klartekst som kan vises i ERROR-menyen via manuell betjening, eller spørres via IEC-bussen med kommandoen:
+Every error condition in the instrument results in an entry in the error queue. The entries in the error queue are detailed error messages in plain text that can be displayed in the ERROR menu via manual operation, or queried over the IEC bus with the command:
 
 ```
 SYSTem:ERRor?
 ```
 
-Hvert kall av `SYSTem:ERRor?` henter én oppføring fra feilkøen. Når det ikke lenger er lagret noen feilmeldinger, svarer instrumentet med `0, "No error"`.
+Each call of `SYSTem:ERRor?` fetches one entry from the error queue. When no error messages are stored any longer, the instrument replies with `0, "No error"`.
 
-Feilkøen bør spørres etter hver SRQ i kontrollerprogrammet, siden oppføringene beskriver feilårsaken mer presist enn statusregistrene. Spesielt i testfasen av et kontrollerprogram bør feilkøen spørres regelmessig, siden også feilaktige kommandoer fra kontrolleren til instrumentet registreres der.
+The error queue should be queried after every SRQ in the controller program, since the entries describe the cause of the error more precisely than the status registers. Especially during the test phase of a controller program, the error queue should be queried regularly, since erroneous commands from the controller to the instrument are also registered there.
 
-### Tilbakestilling av statusrapporteringssystemet
+### Resetting the status reporting system
 
-Tabell 2-7 viser de ulike kommandoene og hendelsene som fører til at statusrapporteringssystemet tilbakestilles. Ingen av kommandoene, bortsett fra `*RST` og `SYSTem:PRESet`, påvirker instrumentets funksjonelle innstillinger. Spesielt endrer DCL ikke instrumentinnstillingene.
+Table 2-7 shows the various commands and events that cause the status reporting system to be reset. None of the commands, apart from `*RST` and `SYSTem:PRESet`, affect the instrument's functional settings. In particular, DCL does not change the instrument settings.
 
-**Tabell 2-7. Resetting Instrument Functions**
+**Table 2-7. Resetting Instrument Functions**
 
-| Effekt | Slå på forsyningsspenning | DCL, SDC (Device Clear, Selected Device Clear) | `*RST` | `*CLS` |
+| Effect | Switching on the supply voltage | DCL, SDC (Device Clear, Selected Device Clear) | `*RST` | `*CLS` |
 |---|---|---|---|---|
-| Nullstill STB, ESR | ja | — | — | ja |
-| Nullstill SRE, ESE | ja | — | — | — |
-| Nullstill EVENt-delene av registrene | ja | — | — | ja |
-| Nullstill ENABle-delene av alle OPERation- og QUEStionable-registre | ja | — | — | — |
-| Fyll PTRansition-delene med 1, nullstill NTRansition-delene | ja | — | — | — |
-| Tøm feilkøen | ja | — | — | ja |
-| Tøm utgangsbufferet | ja | ja | 1) | 1) |
-| Nullstill kommandobehandling og inngangsbuffer | ja | ja | — | — |
+| Clear STB, ESR | yes | — | — | yes |
+| Clear SRE, ESE | yes | — | — | — |
+| Clear the EVENt parts of the registers | yes | — | — | yes |
+| Clear the ENABle parts of all OPERation and QUEStionable registers | yes | — | — | — |
+| Fill the PTRansition parts with 1, clear the NTRansition parts | yes | — | — | — |
+| Empty the error queue | yes | — | — | yes |
+| Empty the output buffer | yes | yes | 1) | 1) |
+| Reset command processing and the input buffer | yes | yes | — | — |
 
-1) Enhver kommando som står først i en kommandolinje, dvs. umiddelbart etter en `<PROGRAM MESSAGE TERMINATOR>`, tømmer utgangsbufferet.
+1) Any command that comes first in a command line, i.e. immediately after a `<PROGRAM MESSAGE TERMINATOR>`, empties the output buffer.
 
-## Feilmeldinger
+## Error messages
 
-### Innledning
+### Introduction
 
-Feilmeldinger legges inn i feil-/hendelseskøen (error/event queue) i statusrapporteringssystemet når instrumentet er i fjernstyringsmodus, og kan leses ut med kommandoen `SYSTem:ERRor?`. Instrumentets svarformat på kommandoen er:
+Error messages are entered in the error/event queue of the status reporting system when the instrument is in remote control mode, and can be read out with the command `SYSTem:ERRor?`. The instrument's response format to the command is:
 
 ```
 <error code>, "<error description>;<remote control command concerned>"
 ```
 
-Angivelsen av fjernstyringskommandoen med semikolon foran er valgfri.
+Stating the remote control command, preceded by a semicolon, is optional.
 
-**Eksempel**
+**Example**
 
-Kommandoen `TEST:COMMAND` gir følgende svar på spørringen `SYSTem:ERRor?`:
+The command `TEST:COMMAND` gives the following reply to the query `SYSTem:ERRor?`:
 
 ```
 -113,"Undefined header;TEST:COMMAND"
 ```
 
-Listene nedenfor beskriver feiltekstene som vises på instrumentet. Det skilles mellom feilmeldinger definert av SCPI, som er merket med negative feilkoder, og de enhetsspesifikke feilmeldingene, som bruker positive feilkoder.
+The lists below describe the error texts shown on the instrument. A distinction is made between error messages defined by SCPI, which are marked with negative error codes, and device-specific error messages, which use positive error codes.
 
-I tabellene nedenfor står feilteksten som legges inn i feil-/hendelseskøen, og som kan leses ut med spørringen `SYSTem:ERRor?`, sammen med en kort forklaring av feilårsaken. Venstre kolonne inneholder den tilhørende feilkoden.
+In the tables below, the error text entered in the error/event queue — which can be read out with the query `SYSTem:ERRor?` — is given together with a short explanation of the cause of the error. The left-hand column contains the corresponding error code.
 
-Hendelser som genererer kommandofeil (Command Errors) skal ikke generere utførelsesfeil (Execution Errors), enhetsspesifikke feil (Device-Specific Errors) eller spørringsfeil (Query Errors); se de øvrige feildefinisjonene i dette kapittelet.
+Events that generate command errors must not generate execution errors, device-specific errors or query errors; see the other error definitions in this chapter.
 
-### Command Error (kommandofeil)
+### Command Error
 
-Et `<error/event number>` i området **[-199, -100]** angir at instrumentets parser har oppdaget en IEEE 488.2-syntaksfeil. Enhver feil i denne klassen fører til at kommandofeilbiten (bit 5) i event status-registeret (IEEE 488.2, avsnitt 11.5.1) settes. Én av følgende hendelser har inntruffet:
+An `<error/event number>` in the range **[-199, -100]** indicates that the instrument's parser has detected an IEEE 488.2 syntax error. Any error in this class causes the command error bit (bit 5) in the event status register (IEEE 488.2, section 11.5.1) to be set. One of the following events has occurred:
 
-- Parseren har oppdaget en IEEE 488.2-syntaksfeil, dvs. at en melding fra kontrolleren til enheten bryter med IEEE 488.2-standarden. Mulige brudd inkluderer et dataelement som bryter med enhetens lytteformater, eller hvis type ikke aksepteres av enheten.
-- En ukjent header ble mottatt. Ukjente headere omfatter feilaktige enhetsspesifikke headere og feilaktige eller ikke-implementerte IEEE 488.2 common commands.
+- The parser has detected an IEEE 488.2 syntax error, i.e. a message from the controller to the device violates the IEEE 488.2 standard. Possible violations include a data element that violates the device's listening formats, or whose type is not accepted by the device.
+- An unknown header was received. Unknown headers include erroneous device-specific headers and erroneous or unimplemented IEEE 488.2 common commands.
 
-| Feilkode | Feiltekst | Forklaring |
+| Error code | Error text | Explanation |
 |---|---|---|
-| -100 | **Command error** | Generisk syntaksfeil for enheter som ikke kan oppdage mer spesifikke feil. Koden angir kun at en Command Error som definert i IEEE 488.2, 11.5.1.1.4 har oppstått. |
-| -101 | **Invalid character** | Et syntaktisk element inneholder et tegn som er ugyldig for den typen; for eksempel en header som inneholder et og-tegn, `SETUP&`. |
-| -102 | **Syntax error** | En ukjent kommando eller datatype ble påtruffet; for eksempel at en streng ble mottatt når enheten ikke aksepterer strenger. |
-| -103 | **Invalid separator** | Parseren forventet en separator og traff på et ulovlig tegn; for eksempel at semikolonet ble utelatt etter en programmeldingsenhet, `*SRE 1:INP1:COUP AC`. |
-| -104 | **Data type error** | Parseren gjenkjente et dataelement av en annen type enn tillatt; for eksempel at numeriske data eller strengdata var forventet, men blokkdata ble mottatt. |
-| -108 | **Parameter not allowed** | Flere parametre enn forventet ble mottatt for headeren; for eksempel aksepterer common-kommandoen `*SRE` bare én parameter, så `*SRE 2,1` er ikke tillatt. |
-| -109 | **Missing parameter** | Færre parametre enn påkrevd ble mottatt for headeren; for eksempel krever common-kommandoen `*SRE` én parameter, så `*SRE` alene er ikke tillatt. |
-| -110 | **Command header error** | En feil ble oppdaget i headeren. |
-| -112 | **Program mnemonic too long** | Headeren inneholder mer enn tolv tegn (se IEEE 488.2, 7.6.1.4.1). |
-| -113 | **Undefined header** | Headeren er syntaktisk korrekt, men er udefinert for denne enheten; for eksempel er `*XYZ` ikke definert for noen enhet. |
-| -114 | **Header suffix out of range** | Verdien av et numerisk suffiks knyttet til en programmnemonic (se avsnittet om syntaks og stil) gjør headeren ugyldig. |
-| -120 | **Numeric data error** | Genereres ved parsing av et dataelement som ser ut til å være numerisk, inkludert de ikke-desimale numeriske typene. For eksempel vil `INP:GAIN 1.0X2` generere denne feilen. |
-| -130 | **Suffix error** | Denne feilen, samt feilene -131 til og med -139, genereres ved parsing av et suffiks. |
-| -131 | **Invalid suffix** | Suffikset følger ikke syntaksen beskrevet i IEEE 488.2, 7.7.3.2, eller suffikset passer ikke for denne enheten. |
-| -134 | **Suffix too long** | Suffikset inneholdt mer enn 12 tegn (se IEEE 488.2, 7.7.3.4). |
-| -138 | **Suffix not allowed** | Et suffiks ble påtruffet etter et numerisk element som ikke tillater suffikser. |
-| -140 | **Character data error** | Genereres ved parsing av et tegndataelement (character data). For eksempel vil `INP:COUP XYZ` generere denne feilen. |
-| -141 | **Invalid character data** | Enten inneholder tegndataelementet et ugyldig tegn, eller så er det mottatte elementet ikke gyldig for headeren. |
-| -144 | **Character data too long** | Tegndataelementet inneholder mer enn tolv tegn (se IEEE 488.2, 7.7.1.4). |
-| -148 | **Character data not allowed** | Et lovlig tegndataelement ble påtruffet der enheten forbyr det. |
-| -150 | **String data error** | Genereres ved parsing av et strengdataelement. For eksempel vil `FUNC "XYZ"` generere denne feilen. |
-| -151 | **Invalid string data** | Et strengdataelement var forventet, men var ugyldig av en eller annen grunn (se IEEE 488.2, 7.7.5.2); for eksempel at en END-melding ble mottatt før det avsluttende anførselstegnet. |
+| -100 | **Command error** | Generic syntax error for devices that cannot detect more specific errors. The code only indicates that a Command Error as defined in IEEE 488.2, 11.5.1.1.4 has occurred. |
+| -101 | **Invalid character** | A syntactic element contains a character that is invalid for that type; for example, a header containing an ampersand, `SETUP&`. |
+| -102 | **Syntax error** | An unknown command or data type was encountered; for example, a string was received when the device does not accept strings. |
+| -103 | **Invalid separator** | The parser expected a separator and encountered an illegal character; for example, the semicolon was omitted after a program message unit, `*SRE 1:INP1:COUP AC`. |
+| -104 | **Data type error** | The parser recognized a data element of a type other than allowed; for example, numeric data or string data was expected but block data was received. |
+| -108 | **Parameter not allowed** | More parameters than expected were received for the header; for example, the common command `*SRE` accepts only one parameter, so `*SRE 2,1` is not allowed. |
+| -109 | **Missing parameter** | Fewer parameters than required were received for the header; for example, the common command `*SRE` requires one parameter, so `*SRE` on its own is not allowed. |
+| -110 | **Command header error** | An error was detected in the header. |
+| -112 | **Program mnemonic too long** | The header contains more than twelve characters (see IEEE 488.2, 7.6.1.4.1). |
+| -113 | **Undefined header** | The header is syntactically correct, but is undefined for this device; for example, `*XYZ` is not defined for any device. |
+| -114 | **Header suffix out of range** | The value of a numeric suffix attached to a program mnemonic (see the section on syntax and style) makes the header invalid. |
+| -120 | **Numeric data error** | Generated when parsing a data element that appears to be numeric, including the non-decimal numeric types. For example, `INP:GAIN 1.0X2` will generate this error. |
+| -130 | **Suffix error** | This error, and errors -131 through -139, are generated when parsing a suffix. |
+| -131 | **Invalid suffix** | The suffix does not follow the syntax described in IEEE 488.2, 7.7.3.2, or the suffix is not appropriate for this device. |
+| -134 | **Suffix too long** | The suffix contained more than 12 characters (see IEEE 488.2, 7.7.3.4). |
+| -138 | **Suffix not allowed** | A suffix was encountered after a numeric element that does not allow suffixes. |
+| -140 | **Character data error** | Generated when parsing a character data element. For example, `INP:COUP XYZ` will generate this error. |
+| -141 | **Invalid character data** | Either the character data element contains an invalid character, or the element received is not valid for the header. |
+| -144 | **Character data too long** | The character data element contains more than twelve characters (see IEEE 488.2, 7.7.1.4). |
+| -148 | **Character data not allowed** | A legal character data element was encountered where the device prohibits it. |
+| -150 | **String data error** | Generated when parsing a string data element. For example, `FUNC "XYZ"` will generate this error. |
+| -151 | **Invalid string data** | A string data element was expected, but was invalid for some reason (see IEEE 488.2, 7.7.5.2); for example, an END message was received before the closing quotation mark. |
 
-### Execution Error (utførelsesfeil)
+### Execution Error
 
-Et `<error/event number>` i området **[-299, -200]** angir at en feil er oppdaget av instrumentets utførelseskontrollblokk. Enhver feil i denne klassen skal føre til at utførelsesfeilbiten (bit 4) i event status-registeret (IEEE 488.2, avsnitt 11.5.1) settes. Én av følgende hendelser har inntruffet:
+An `<error/event number>` in the range **[-299, -200]** indicates that an error has been detected by the instrument's execution control block. Any error in this class must cause the execution error bit (bit 4) in the event status register (IEEE 488.2, section 11.5.1) to be set. One of the following events has occurred:
 
-- Et `<PROGRAM DATA>`-element etter en header ble vurdert av enheten til å ligge utenfor lovlig inngangsområde, eller er på annen måte uforenlig med enhetens egenskaper.
-- En gyldig programmelding kunne ikke utføres korrekt på grunn av en tilstand i enheten.
+- A `<PROGRAM DATA>` element following a header was judged by the device to lie outside the legal input range, or is otherwise incompatible with the device's capabilities.
+- A valid program message could not be executed correctly because of a condition in the device.
 
-Utførelsesfeil rapporteres av instrumentet etter at avrunding og evaluering av uttrykk har funnet sted. Avrunding av et numerisk dataelement vil for eksempel ikke bli rapportert som en utførelsesfeil.
+Execution errors are reported by the instrument after rounding and expression evaluation have taken place. Rounding of a numeric data element, for example, will not be reported as an execution error.
 
-| Feilkode | Feiltekst | Forklaring |
+| Error code | Error text | Explanation |
 |---|---|---|
-| -200 | **Execution error** | Generisk feil for enheter som ikke kan oppdage mer spesifikke feil. Koden angir kun at en Execution Error som definert i IEEE 488.2, 11.5.1.1.5 har oppstått. |
-| -203 | **Command protected** | Angir at en lovlig passordbeskyttet programkommando eller spørring ikke kunne utføres fordi kommandoen var deaktivert. |
-| -212 | **Arm ignored** | Angir at et arming-signal ble mottatt og gjenkjent av enheten, men ble ignorert. Instrumentet genererer denne feilen når ARM mottas uten at minneopptak (memory recording) er konfigurert. |
-| -213 | **Init ignored** | Angir at en forespørsel om en måling ble ignorert fordi en annen måling allerede pågikk. |
-| -221 | **Settings conflict** | Angir at et lovlig programdataelement ble parset, men ikke kunne utføres på grunn av enhetens nåværende tilstand (se IEEE 488.2, 6.4.5.3 og 11.5.1.1.5). |
-| -222 | **Data out of range** | Angir at et lovlig programdataelement ble parset, men ikke kunne utføres fordi den tolkede verdien lå utenfor det lovlige området slik det er definert av enheten (se IEEE 488.2, 11.5.1.1.5). |
-| -223 | **Too much data** | Angir at et lovlig programdataelement av typen blokk, uttrykk eller streng ble mottatt med mer data enn enheten kunne håndtere på grunn av minne eller tilsvarende enhetsspesifikke krav. |
-| -224 | **Illegal parameter value** | Brukes der en eksakt verdi fra en liste av mulige verdier var forventet. |
-| -225 | **Out of memory** | Enheten har ikke nok minne til å utføre den forespurte operasjonen. |
-| -230 | **Data corrupt or stale** | Muligens ugyldige data; en ny avlesning er startet, men ikke fullført siden forrige tilgang. |
-| -240 | **Hardware error** | Angir at en lovlig programkommando eller spørring ikke kunne utføres på grunn av et maskinvareproblem i enheten. |
+| -200 | **Execution error** | Generic error for devices that cannot detect more specific errors. The code only indicates that an Execution Error as defined in IEEE 488.2, 11.5.1.1.5 has occurred. |
+| -203 | **Command protected** | Indicates that a legal, password-protected program command or query could not be executed because the command was disabled. |
+| -212 | **Arm ignored** | Indicates that an arming signal was received and recognized by the device, but was ignored. The instrument generates this error when ARM is received without memory recording being configured. |
+| -213 | **Init ignored** | Indicates that a request for a measurement was ignored because another measurement was already in progress. |
+| -221 | **Settings conflict** | Indicates that a legal program data element was parsed but could not be executed because of the device's current state (see IEEE 488.2, 6.4.5.3 and 11.5.1.1.5). |
+| -222 | **Data out of range** | Indicates that a legal program data element was parsed but could not be executed because the interpreted value lay outside the legal range as defined by the device (see IEEE 488.2, 11.5.1.1.5). |
+| -223 | **Too much data** | Indicates that a legal program data element of block, expression or string type was received with more data than the device could handle because of memory or similar device-specific requirements. |
+| -224 | **Illegal parameter value** | Used where an exact value from a list of possible values was expected. |
+| -225 | **Out of memory** | The device does not have enough memory to perform the requested operation. |
+| -230 | **Data corrupt or stale** | Possibly invalid data; a new reading has been started but not completed since the last access. |
+| -240 | **Hardware error** | Indicates that a legal program command or query could not be executed because of a hardware problem in the device. |
 
-### Device-Specific Error (enhetsspesifikk feil)
+### Device-Specific Error
 
-Et `<error/event number>` i området **[-399, -300]** eller **[1, 32767]** angir at instrumentet har oppdaget en feil, muligens forårsaket av en unormal maskinvare- eller fastvaretilstand. Disse kodene brukes også for feil i selvtest-responser. Enhver feil i denne klassen fører til at biten for enhetsspesifikk feil (bit 3) i event status-registeret (IEEE 488.2, avsnitt 11.5.1) settes.
+An `<error/event number>` in the range **[-399, -300]** or **[1, 32767]** indicates that the instrument has detected an error, possibly caused by an abnormal hardware or firmware condition. These codes are also used for errors in self-test responses. Any error in this class causes the device-specific error bit (bit 3) in the event status register (IEEE 488.2, section 11.5.1) to be set.
 
-| Feilkode | Feiltekst | Forklaring |
+| Error code | Error text | Explanation |
 |---|---|---|
-| -300 | **Device-specific error** | Generisk enhetsavhengig feil for enheter som ikke kan oppdage mer spesifikke feil. Koden angir kun at en Device-Dependent Error som definert i IEEE 488.2, 11.5.1.1.6 har oppstått. |
-| -310 | **System error** | Angir at en feil som enheten betegner som "system error" har oppstått. Koden er enhetsavhengig. |
-| -311 | **Memory error** | Angir en fysisk feil i enhetens minne, for eksempel paritetsfeil. |
-| -313 | **Calibration memory lost** | Angir at ikke-flyktige kalibreringsdata som brukes av `*CAL?`-kommandoen har gått tapt. |
-| -314 | **Save/recall memory lost** | Angir at de ikke-flyktige dataene lagret med `*SAV?`-kommandoen har gått tapt. |
-| -315 | **Configuration memory lost** | Angir at ikke-flyktige konfigurasjonsdata lagret av enheten har gått tapt. |
-| -320 | **Storage fault** | Angir at fastvaren oppdaget en feil ved bruk av datalagring. Feilen er ikke en indikasjon på fysisk skade eller svikt i noe masselagringselement. |
-| -325 | **Sample factor adjusted** | Angir at anvendelse av gjeldende konfigurasjon førte til at samplingsfaktoren (sample factor) ble justert. |
-| -326 | **Recording time too long** | Angir at dataene som ville blitt samlet inn i løpet av den angitte opptakstiden, ikke ville fått plass i tilgjengelig minne. |
-| -330 | **Self-test failed** | (Ingen ytterligere forklaring i kilden.) |
-| -340 | **Calibration failed** | (Ingen ytterligere forklaring i kilden.) |
-| -350 | **Queue overflow** | En spesifikk kode som legges inn i køen i stedet for koden som forårsaket feilen. Koden angir at det ikke er plass i køen, og at en feil oppsto, men ikke ble registrert. |
-| -360 | **Communication error** | (Ingen ytterligere forklaring i kilden.) |
+| -300 | **Device-specific error** | Generic device-dependent error for devices that cannot detect more specific errors. The code only indicates that a Device-Dependent Error as defined in IEEE 488.2, 11.5.1.1.6 has occurred. |
+| -310 | **System error** | Indicates that an error the device designates as a "system error" has occurred. The code is device dependent. |
+| -311 | **Memory error** | Indicates a physical error in the device's memory, for example a parity error. |
+| -313 | **Calibration memory lost** | Indicates that non-volatile calibration data used by the `*CAL?` command has been lost. |
+| -314 | **Save/recall memory lost** | Indicates that the non-volatile data stored with the `*SAV?` command has been lost. |
+| -315 | **Configuration memory lost** | Indicates that non-volatile configuration data stored by the device has been lost. |
+| -320 | **Storage fault** | Indicates that the firmware detected a fault when using data storage. The error is not an indication of physical damage or failure of any mass storage element. |
+| -325 | **Sample factor adjusted** | Indicates that applying the current configuration caused the sample factor to be adjusted. |
+| -326 | **Recording time too long** | Indicates that the data that would be collected during the stated recording time would not fit in the available memory. |
+| -330 | **Self-test failed** | (No further explanation in the source.) |
+| -340 | **Calibration failed** | (No further explanation in the source.) |
+| -350 | **Queue overflow** | A specific code entered into the queue in place of the code that caused the error. The code indicates that there is no room in the queue and that an error occurred but was not recorded. |
+| -360 | **Communication error** | (No further explanation in the source.) |
 
-### Query Error (spørringsfeil)
+### Query Error
 
-Et `<error/event number>` i området **[-499, -400]** angir at instrumentets utgangskø-kontroll (output queue control) har oppdaget et problem med meldingsutvekslingsprotokollen beskrevet i IEEE 488.2, kapittel 6. Enhver feil i denne klassen fører til at spørringsfeilbiten (bit 2) i event status-registeret (IEEE 488.2, avsnitt 11.5.1) settes. Disse feilene tilsvarer protokollfeilene for meldingsutveksling beskrevet i IEEE 488.2, avsnitt 6.5. Én av følgende er tilfelle:
+An `<error/event number>` in the range **[-499, -400]** indicates that the instrument's output queue control has detected a problem with the message exchange protocol described in IEEE 488.2, chapter 6. Any error in this class causes the query error bit (bit 2) in the event status register (IEEE 488.2, section 11.5.1) to be set. These errors correspond to the message exchange protocol errors described in IEEE 488.2, section 6.5. One of the following is the case:
 
-- Det gjøres et forsøk på å lese data fra utgangskøen når ingen utdata verken er til stede eller underveis.
-- Data i utgangskøen har gått tapt.
-- Hendelser som genererer spørringsfeil skal ikke generere kommandofeil, utførelsesfeil eller enhetsspesifikke feil; se de øvrige feildefinisjonene i dette kapittelet.
+- An attempt is made to read data from the output queue when no output is either present or in progress.
+- Data in the output queue has been lost.
+- Events that generate query errors must not generate command errors, execution errors or device-specific errors; see the other error definitions in this chapter.
 
-| Feilkode | Feiltekst | Forklaring |
+| Error code | Error text | Explanation |
 |---|---|---|
-| -400 | **Query error** | Generisk spørringsfeil for enheter som ikke kan oppdage mer spesifikke feil. Koden angir kun at en Query Error som definert i IEEE 488.2, 11.5.1.1.7 og 6.3 har oppstått. |
-| -410 | **Query INTERRUPTED** | Angir at en tilstand som forårsaker en INTERRUPTED Query-feil har oppstått (se IEEE 488.2, 6.3.2.3); for eksempel en spørring etterfulgt av DAB eller GET før et svar var fullstendig sendt. |
-| -420 | **Query UNTERMINATED** | Angir at en tilstand som forårsaker en UNTERMINATED Query-feil har oppstått (se IEEE 488.2, 6.3.2.2); for eksempel at enheten ble adressert til å snakke (talk) og en ufullstendig programmelding ble mottatt. |
-| -430 | **Query DEADLOCKED** | Angir at en tilstand som forårsaker en DEADLOCKED Query-feil har oppstått (se IEEE 488.2, 6.3.1.7); for eksempel at både inngangsbuffer og utgangsbuffer er fulle og enheten ikke kan fortsette. |
-| -440 | **Query UNTERMINATED after indefinite response** | Angir at en spørring ble mottatt i samme programmelding etter at en spørring som ba om et ubestemt (indefinite) svar ble utført (se IEEE 488.2, 6.5.7.5). |
+| -400 | **Query error** | Generic query error for devices that cannot detect more specific errors. The code only indicates that a Query Error as defined in IEEE 488.2, 11.5.1.1.7 and 6.3 has occurred. |
+| -410 | **Query INTERRUPTED** | Indicates that a condition causing an INTERRUPTED Query error has occurred (see IEEE 488.2, 6.3.2.3); for example, a query followed by DAB or GET before a response had been fully sent. |
+| -420 | **Query UNTERMINATED** | Indicates that a condition causing an UNTERMINATED Query error has occurred (see IEEE 488.2, 6.3.2.2); for example, the device was addressed to talk and an incomplete program message was received. |
+| -430 | **Query DEADLOCKED** | Indicates that a condition causing a DEADLOCKED Query error has occurred (see IEEE 488.2, 6.3.1.7); for example, both the input buffer and the output buffer are full and the device cannot continue. |
+| -440 | **Query UNTERMINATED after indefinite response** | Indicates that a query was received in the same program message after a query requesting an indefinite response was executed (see IEEE 488.2, 6.5.7.5). |
 
-## Programmeringseksempler
+## Programming examples
 
-Dette kapittelet gjengir eksemplene fra kapittel 6 «Programming Examples» i Remote Control Users Guide. Eksemplene viser hvordan instrumentet programmeres og kan brukes som utgangspunkt for mer komplekse programmeringsoppgaver.
+This chapter reproduces the examples from chapter 6 “Programming Examples” in the Remote Control Users Guide. The examples show how the instrument is programmed and can be used as a starting point for more complex programming tasks.
 
-### Introduksjon
+### Introduction
 
-I disse eksemplene kan grensesnittet (RS-232 / GPIB / Ethernet) velges ved å sette konstanten `INTFC` til den tilhørende `INTFC_…`-konstanten. Kommunikasjonsparametre (f.eks. seriell port, baudrate, IP-adresse osv.) settes med konstantene `RSRC_NAME` og `RSRC_ATTR_…`.
+In these examples the interface (RS-232 / GPIB / Ethernet) can be selected by setting the `INTFC` constant to the corresponding `INTFC_…` constant. Communication parameters (e.g. serial port, baud rate, IP address and so on) are set with the `RSRC_NAME` and `RSRC_ATTR_…` constants.
 
-Programmeringseksemplene er skrevet i ANSI C med VISA-bibliotek implementert i henhold til versjon 2.2 av VISA-spesifikasjonen (www.vxipnp.org), for eksempel National Instruments VISA 2.5 eller nyere. Det er mulig å kommunisere med instrumentet over RS-232- eller Ethernet-grensesnitt kun med grunnleggende operativsystem-API (f.eks. Win32 eller UNIX), altså uten VISA-bibliotek. Det finnes ett slikt eksempel for Ethernet-grensesnittet (med Win32 API) senere i dette kapittelet — se [«U, I, P Measurement over Ethernet Interface without VISA Library»](#u-i-p-measurement-over-ethernet-interface-without-visa-library--rå-tcp-socket), som er det mest relevante hvis du skal lage din egen TCP-klient.
+The programming examples are written in ANSI C with a VISA library implemented according to version 2.2 of the VISA specification (www.vxipnp.org), for example National Instruments VISA 2.5 or later. It is possible to communicate with the instrument over the RS-232 or Ethernet interface using only basic operating system APIs (e.g. Win32 or UNIX), that is, without a VISA library. There is one such example for the Ethernet interface (using the Win32 API) later in this chapter — see [“U, I, P Measurement over Ethernet Interface without VISA Library”](#u-i-p-measurement-over-ethernet-interface-without-visa-library--raw-tcp-socket), which is the most relevant one if you are going to build your own TCP client.
 
-Merk fellesmønsteret i alle eksemplene:
+Note the common pattern in all the examples:
 
-- VISA-ressursnavnet for Ethernet er `"TCPIP::192.168.2.251::23::SOCKET"` — altså en rå TCP-socket mot instrumentets IP-adresse på **port 23**.
-- Alle kommandoer sendes som ASCII-tekst avsluttet med linjeskift (`\n`); svar leses tilbake som tekstlinjer.
+- The VISA resource name for Ethernet is `"TCPIP::192.168.2.251::23::SOCKET"` — that is, a raw TCP socket to the instrument's IP address on **port 23**.
+- All commands are sent as ASCII text terminated with a line feed (`\n`); responses are read back as lines of text.
 
-### Initialize Interface — initialisering av grensesnittet
+### Initialize Interface — initializing the interface
 
-Grensesnittet må initialiseres før noen kommunikasjon med instrumentet finner sted.
+The interface must be initialized before any communication with the instrument takes place.
 
-Dette programmet åpner en VISA-sesjon mot instrumentet. Programmet bruker RS-232-, GPIB- eller Ethernet-grensesnitt avhengig av innstillingen av konstanten `INTFC`, og setter I/O-timeout til 10 sekunder. For en egen TCP-klient er det verdt å merke seg ressursnavnet for LAN (`TCPIP::<ip>::23::SOCKET`) og timeout-verdien (10 s), som er et fornuftig utgangspunkt også for en socket-basert klient.
+This program opens a VISA session to the instrument. The program uses the RS-232, GPIB or Ethernet interface depending on the setting of the `INTFC` constant, and sets the I/O timeout to 10 seconds. For your own TCP client it is worth noting the LAN resource name (`TCPIP::<ip>::23::SOCKET`) and the timeout value (10 s), which is a sensible starting point for a socket-based client too.
 
 ```c
 /*
@@ -4778,11 +4776,11 @@ int main(int argc,char *argv[])
 }
 ```
 
-### Initialize Instrument — identifisering og reset
+### Initialize Instrument — identification and reset
 
-Før videre kommunikasjon bør instrumentets identitet verifiseres, og instrumentet bør settes i en kjent (standard) tilstand.
+Before communicating further, the instrument's identity should be verified and the instrument should be put into a known (default) state.
 
-Dette programmet åpner en VISA-sesjon mot instrumentet, leser ID-strengen og resetter instrumentet. SCPI-sekvensen — send `*IDN?`, les svaret, send `*RST` — er direkte gjenbrukbar i en egen TCP-klient som «håndtrykk» ved oppstart: den bekrefter at du snakker med riktig instrument og gir deg en kjent utgangstilstand.
+This program opens a VISA session to the instrument, reads the ID string and resets the instrument. The SCPI sequence — send `*IDN?`, read the response, send `*RST` — is directly reusable in your own TCP client as a startup “handshake”: it confirms you are talking to the right instrument and gives you a known initial state.
 
 ```c
 /*
@@ -4881,13 +4879,13 @@ int main(int argc,char *argv[])
 }
 ```
 
-### Perform Simple Power Measurement — enkel effektmåling
+### Perform Simple Power Measurement — a simple power measurement
 
-Gyldige signaler bør være tilkoblet instrumentets inngangskanaler, ellers kan måleverdien være ugyldig.
+Valid signals should be connected to the instrument's input channels, otherwise the measurement value may be invalid.
 
-Programmet åpner en VISA-sesjon og utfører en enkel effektmåling, og venter synkront (blokkerer i `viRead` mens det ventes på målingen). Tiden det tar å måle effekten avhenger av spennings- og strømsignalene som er koblet til instrumentet. Standard midlingsintervall (lik måletiden) er 300 ms. Dersom `viRead` går i timeout før den målte effekten returneres, må VISA-timeout økes; bruk funksjonen `viSetAttribute` for å endre timeout-verdien (standard er 10 sek).
+The program opens a VISA session and performs a simple power measurement, waiting synchronously (blocking in `viRead` while waiting for the measurement). The time it takes to measure the power depends on the voltage and current signals connected to the instrument. The default averaging interval (equal to the measurement time) is 300 ms. If `viRead` times out before the measured power is returned, the VISA timeout must be increased; use the `viSetAttribute` function to change the timeout value (the default is 10 s).
 
-Den gjenbrukbare SCPI-sekvensen for din egen klient er: `*RST` → vent på autorange → `*TRG` (trigg en måling) → vent → `DATA? "POW:ACT"` (hent aktiv effekt) → les svarlinjen.
+The reusable SCPI sequence for your own client is: `*RST` → wait for autorange → `*TRG` (trigger a measurement) → wait → `DATA? "POW:ACT"` (fetch active power) → read the response line.
 
 ```c
 /*
@@ -5014,13 +5012,13 @@ int main(int argc,char *argv[])
 }
 ```
 
-### U, I, P Measurement — spennings-, strøm- og effektmåling
+### U, I, P Measurement — voltage, current and power measurement
 
-Dette eksemplet konfigurerer instrumentet til å måle effekt, spenning og strøm på et trefasesystem 3 x 400V/50Hz og leser målingene.
+This example configures the instrument to measure power, voltage and current on a three-phase system 3 x 400V/50Hz and reads the measurements.
 
-Tiden det tar å fullføre målingen er 1 s (midlingstid, satt med `APER 1.0`). Spørringen `DATA?` venter ikke på at målingen fullføres — den returnerer de verdiene som er tilgjengelige i øyeblikket. Forsinkelsen på 2 sekunder gir instrumentet nok tid til å fullføre målingen før data leses.
+The time it takes to complete the measurement is 1 s (the averaging time, set with `APER 1.0`). The `DATA?` query does not wait for the measurement to complete — it returns the values available at that moment. The delay of 2 seconds gives the instrument enough time to complete the measurement before the data is read.
 
-Konfigurasjonssekvensen her (`ROUT:SYST`, `SYNC:SOUR`, `VOLT1:RANG`, `CURR1:RANG:AUTO`, `APER`, `FUNC`, `INIT:CONT ON`, deretter `DATA?`) er nøyaktig den samme som brukes i det VISA-frie Ethernet-eksemplet lenger ned — det er denne SCPI-oppskriften du gjenbruker i din egen TCP-klient.
+The configuration sequence here (`ROUT:SYST`, `SYNC:SOUR`, `VOLT1:RANG`, `CURR1:RANG:AUTO`, `APER`, `FUNC`, `INIT:CONT ON`, then `DATA?`) is exactly the same as the one used in the VISA-free Ethernet example further down — this is the SCPI recipe you reuse in your own TCP client.
 
 ```c
 /*
@@ -5152,13 +5150,13 @@ int main(int argc,char *argv[])
 }
 ```
 
-### Continuous Power Measurement — kontinuerlig effektmåling
+### Continuous Power Measurement
 
-Gyldige signaler bør være tilkoblet instrumentets inngangskanaler, ellers kan måleverdien være ugyldig.
+Valid signals should be connected to the instrument's input channels, otherwise the measurement value may be invalid.
 
-Programmet utfører kontinuerlig effektmåling. Bit 10 (verdi `0x400`) i operasjonsstatusregisteret brukes til å detektere slutten på midlingsintervallet — slik sikres det at den nyeste målingen hentes og vises umiddelbart. Standard midlingsintervall er 300 ms; dersom `viRead` går i timeout før målt effekt returneres, må VISA-timeout økes med `viSetAttribute` (standard er 10 sek).
+The program performs a continuous power measurement. Bit 10 (value `0x400`) in the operation status register is used to detect the end of the averaging interval — this ensures that the newest measurement is fetched and displayed immediately. The default averaging interval is 300 ms; if `viRead` times out before the measured power is returned, the VISA timeout must be increased with `viSetAttribute` (the default is 10 s).
 
-Pollemønsteret er direkte overførbart til en TCP-klient: send `*CLS` (nullstill tidligere hendelse), poll `STAT:OPER?` til bit 10 er satt, og hent så ferske verdier med `DATA? "POW"`. Dette er den anbefalte måten å synkronisere avlesning med instrumentets måletakt på, i stedet for faste ventetider.
+The polling pattern transfers directly to a TCP client: send `*CLS` (clear the previous event), poll `STAT:OPER?` until bit 10 is set, and then fetch fresh values with `DATA? "POW"`. This is the recommended way to synchronize readings with the instrument's measurement rate, instead of using fixed wait times.
 
 ```c
 /*
@@ -5296,19 +5294,19 @@ int main(int argc,char *argv[])
 }
 ```
 
-### U, I, P Measurement over Ethernet Interface without VISA Library — rå TCP-socket
+### U, I, P Measurement over Ethernet Interface without VISA Library — raw TCP socket
 
-**Dette er nøkkeleksemplet for en egen applikasjon som snakker direkte med instrumentet over TCP/IP, uten VISA-bibliotek.** Eksemplet konfigurerer instrumentet til å måle effekt, spenning og strøm på et trefasesystem 3 x 400V/50Hz og leser målingene. Det bruker Win32 Winsock-API, men mønsteret er identisk i alle språk/miljøer med TCP-sockets (Python, C#, Java, Node.js, UNIX sockets osv.).
+**This is the key example for your own application talking directly to the instrument over TCP/IP, without a VISA library.** The example configures the instrument to measure power, voltage and current on a three-phase system 3 x 400V/50Hz and reads the measurements. It uses the Win32 Winsock API, but the pattern is identical in any language/environment with TCP sockets (Python, C#, Java, Node.js, UNIX sockets and so on).
 
-Tiden det tar å fullføre målingen er 1 s (midlingstid). Spørringen `DATA?` venter ikke på at målingen fullføres, så den returnerer verdiene som er tilgjengelige i øyeblikket; forsinkelsen på 2 sekunder gir instrumentet tid til å fullføre målingen før data leses.
+The time it takes to complete the measurement is 1 s (the averaging time). The `DATA?` query does not wait for the measurement to complete, so it returns the values available at that moment; the delay of 2 seconds gives the instrument time to complete the measurement before the data is read.
 
-Det som er direkte gjenbrukbart for din egen TCP-klient:
+What is directly reusable for your own TCP client:
 
-- **Tilkobling:** åpne en TCP-strømsocket (`AF_INET`, `SOCK_STREAM`) og koble til instrumentets IP-adresse (`HOST`, her `192.168.2.251`) på **port 23** (`PORT`).
-- **Sending (`socket_puts`):** hver SCPI-kommando sendes som ren ASCII-tekst med `\n` (linjeskift) lagt til på slutten.
-- **Mottak (`socket_gets`):** gjør ett `recv()`-kall (inntil 1024 byte) og kutter strengen ved første `\n`; en eventuell `\r` rett før fjernes, og linjen null-termineres. Dette er hele «protokollen» — linjebasert tekst over TCP. Merk at koden ikke leser i løkke: en robust klient bør lese gjentatte ganger til `\n` er mottatt, siden TCP ikke garanterer at hele svarlinjen kommer i ett `recv()`-kall (jf. `sio_gets` i RS-232-eksemplet, som leser tegn for tegn til `\n`).
-- **SCPI-sekvensen** i `main()` (`*RST`, `ROUT:SYST "3W"`, `SYNC:SOUR VOLT1`, `VOLT1:RANG 300.0`, `CURR1:RANG:AUTO ON`, `APER 1.0`, `FUNC …`, `INIT:CONT ON`, `DATA?`) kan kopieres uendret.
-- Den utkommenterte `*IDN?`-blokken (`#if 0 … #endif`) viser hvordan du verifiserer forbindelsen ved oppstart.
+- **Connecting:** open a TCP stream socket (`AF_INET`, `SOCK_STREAM`) and connect to the instrument's IP address (`HOST`, here `192.168.2.251`) on **port 23** (`PORT`).
+- **Sending (`socket_puts`):** each SCPI command is sent as plain ASCII text with `\n` (a line feed) appended at the end.
+- **Receiving (`socket_gets`):** make one `recv()` call (up to 1024 bytes) and cut the string at the first `\n`; any `\r` immediately before it is removed, and the line is null-terminated. That is the whole “protocol” — line-based text over TCP. Note that the code does not read in a loop: a robust client should read repeatedly until `\n` has been received, since TCP does not guarantee that the whole response line arrives in a single `recv()` call (cf. `sio_gets` in the RS-232 example, which reads character by character until `\n`).
+- **The SCPI sequence** in `main()` (`*RST`, `ROUT:SYST "3W"`, `SYNC:SOUR VOLT1`, `VOLT1:RANG 300.0`, `CURR1:RANG:AUTO ON`, `APER 1.0`, `FUNC …`, `INIT:CONT ON`, `DATA?`) can be copied unchanged.
+- The commented-out `*IDN?` block (`#if 0 … #endif`) shows how to verify the connection at startup.
 
 ```c
 /*
@@ -5578,20 +5576,20 @@ int main(int argc,char *argv[])
 }
 ```
 
-#### Oppsummert protokoll for egen TCP-klient
+#### The protocol in summary, for your own TCP client
 
-Basert på eksemplet over er alt du trenger for å snakke med instrumentet fra egen kode:
+Based on the example above, everything you need to talk to the instrument from your own code is:
 
-1. Åpne TCP-forbindelse til instrumentets IP-adresse, port 23.
-2. Send SCPI-kommandoer som ASCII-linjer avsluttet med `\n`.
-3. For spørringer (kommandoer som slutter med `?`): les svaret som én tekstlinje avsluttet med `\n` (eventuelt `\r\n` — strip `\r`).
-4. Konfigurer måling én gang (`*RST`, `ROUT:SYST`, `SYNC:SOUR`, områder, `APER`, `FUNC`, `INIT:CONT ON`), og hent deretter verdier med `DATA?` så ofte du ønsker — eventuelt synkronisert mot `STAT:OPER?` bit 10 slik det kontinuerlige eksemplet viser.
+1. Open a TCP connection to the instrument's IP address, port 23.
+2. Send SCPI commands as ASCII lines terminated with `\n`.
+3. For queries (commands ending in `?`): read the response as a single line of text terminated with `\n` (possibly `\r\n` — strip the `\r`).
+4. Configure the measurement once (`*RST`, `ROUT:SYST`, `SYNC:SOUR`, ranges, `APER`, `FUNC`, `INIT:CONT ON`), then fetch values with `DATA?` as often as you like — optionally synchronized against `STAT:OPER?` bit 10, as the continuous example shows.
 
 ### U, I, P Measurement over RS-232 Interface without VISA Library
 
-Dette eksemplet gjør det samme som Ethernet-eksemplet over — konfigurerer instrumentet til å måle effekt, spenning og strøm på et trefasesystem 3 x 400V/50Hz og leser målingene — men over RS-232 med Win32 API (`CreateFile`/`ReadFile`/`WriteFile`) i stedet for sockets. Det er mest relevant som referanse hvis du trenger seriell kommunikasjon; for en TCP-applikasjon er Ethernet-eksemplet over det du skal bruke. Merk at SCPI-sekvensen i `main()` er identisk — bare transportlaget er byttet ut.
+This example does the same as the Ethernet example above — configures the instrument to measure power, voltage and current on a three-phase system 3 x 400V/50Hz and reads the measurements — but over RS-232 with the Win32 API (`CreateFile`/`ReadFile`/`WriteFile`) instead of sockets. It is mainly relevant as a reference if you need serial communication; for a TCP application the Ethernet example above is the one to use. Note that the SCPI sequence in `main()` is identical — only the transport layer has been swapped out.
 
-Tiden det tar å fullføre målingen er 1 s (midlingstid). Spørringen `DATA?` venter ikke på at målingen fullføres; forsinkelsen på 2 sekunder gir instrumentet tid til å fullføre målingen før data leses.
+The time it takes to complete the measurement is 1 s (the averaging time). The `DATA?` query does not wait for the measurement to complete; the delay of 2 seconds gives the instrument time to complete the measurement before the data is read.
 
 ```c
 /*
@@ -5930,7 +5928,7 @@ int main(int argc,char *argv[])
 
     Delay(2.0);        /* Wait 2 seconds */
 
-    /* --- Rekonstruert: kildeutsnittet slutter på side 6-26 --- */
+    /* --- Reconstructed: the source excerpt ends on page 6-26 --- */
     sio_puts(&sio,"DATA?");             /* Query the measurement */
     memset(buffer,0,sizeof(buffer));    /* Clear buffer */
     sio_gets(&sio,buffer);              /* Read values */
@@ -5942,4 +5940,4 @@ int main(int argc,char *argv[])
 }
 ```
 
-> **Merk:** Kildeutsnittet fra manualen slutter etter `Delay(2.0);` (side 6-26), midt i slutten av RS-232-eksemplet. Linjene etter kommentaren «Rekonstruert» ovenfor er ikke fra manualen, men er rekonstruert etter samme mønster som Ethernet-eksemplet: spørring med `sio_puts(&sio,"DATA?")`, lesing av svaret med `sio_gets`, utskrift av verdien og lukking av porten med `sio_close`.
+> **Note:** The source excerpt from the manual ends after `Delay(2.0);` (page 6-26), in the middle of the end of the RS-232 example. The lines after the “Reconstructed” comment above are not from the manual, but have been reconstructed following the same pattern as the Ethernet example: query with `sio_puts(&sio,"DATA?")`, read the response with `sio_gets`, print the value and close the port with `sio_close`.
