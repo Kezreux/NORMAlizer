@@ -6,7 +6,7 @@ build-backend = "scikit_build_core.build"
 name = "flukenorma"
 version = "0.1.0"
 description = "Python bindings for the Fluke NORMA 4000/5000 TCP/SCPI remote-control wrapper"
-readme = "README.md"
+readme = "module/README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 keywords = ["fluke", "norma", "scpi", "power-analyzer", "instrument", "tcp"]
@@ -29,3 +29,10 @@ NORMA_BUILD_TESTS = "OFF"
 NORMA_BUILD_EXAMPLES = "OFF"
 NORMA_BUILD_C_API = "OFF"
 NORMA_INSTALL = "OFF"
+
+[tool.cibuildwheel]
+# CPython only (pybind11 wheel per version); the selection also honours
+# requires-python above. Used by .github/workflows/publish.yml.
+skip = "pp*"
+# Sanity check inside every built wheel: the compiled extension must import.
+test-command = 'python -c "import flukenorma; print(flukenorma.__version__)"'
