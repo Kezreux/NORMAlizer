@@ -1,50 +1,50 @@
-# FlukeNorma — C++/Python-wrapper for Fluke NORMA 4000/5000 TCP-API
+# FlukeNorma — C++/Python wrapper for the Fluke NORMA 4000/5000 TCP API
 
-C++-bibliotek som pakker inn fjernstyrings-API-et (SCPI over TCP, port 23) til
-effektanalysatorene **Fluke NORMA 4000/5000**, med bindinger som gjør det samme
-API-et tilgjengelig fra flere språk:
+A C++ library that wraps the remote control API (SCPI over TCP, port 23) for
+**Fluke NORMA 4000/5000** power analyzers, with bindings that expose the same
+API to multiple languages:
 
-| Språk | Mekanisme | Target/pakke |
+| Language | Mechanism | Target/package |
 |---|---|---|
-| **C++** | Moderne CMake-pakke (`find_package(FlukeNorma)` eller `FetchContent`) | `FlukeNorma::core` |
+| **C++** | Modern CMake package (`find_package(FlukeNorma)` or `FetchContent`) | `FlukeNorma::core` |
 | **Python** | [pybind11](https://github.com/pybind/pybind11) (`pip install .`) | `flukenorma` |
-| **C# / LabVIEW / Rust / Java / MATLAB / ...** | Stabil C-ABI (delt bibliotek + `fluke_norma_c.h`) | `FlukeNorma::c` (`flukenorma_c.dll` / `.so`) |
+| **C# / LabVIEW / Rust / Java / MATLAB / ...** | Stable C ABI (shared library + `fluke_norma_c.h`) | `FlukeNorma::c` (`flukenorma_c.dll` / `.so`) |
 
-Protokollreferansen ligger i [Fluke-NORMA-TCP-API.md](Fluke-NORMA-TCP-API.md).
-TCP-laget bruker [standalone Asio](https://think-async.com/Asio/) (header-only,
-hentes automatisk, skjult bak pimpl så konsumenter aldri ser Asio-headere).
+The protocol reference is available in [Fluke-NORMA-TCP-API.md](Fluke-NORMA-TCP-API.md).
+The TCP layer uses [standalone Asio](https://think-async.com/Asio/) (header-only,
+fetched automatically, and hidden behind pimpl so consumers never see Asio headers).
 
-## Struktur
+## Structure
 
 ```
-├── CMakeLists.txt               Toppnivå-bygg (peker inn i module/)
+├── CMakeLists.txt               Top-level build (includes module/)
 ├── CMakePresets.json
 ├── pyproject.toml               pip install . (scikit-build-core)
 └── module/
-    ├── include/fluke/norma/     Offentlige C++-headere
-    │   ├── transport.hpp        Transport-abstraksjon (TCP nå; RS-232/USB mulig senere)
-    │   ├── tcp_transport.hpp    Asio-basert TCP-transport (port 23, \n-terminerte linjer)
-    │   ├── scpi_client.hpp      SCPI-linjeprotokoll: send/query, parsing, feilkø
-    │   ├── instrument.hpp       NormaInstrument — høynivåfasade (typisk måleflyt)
-    │   ├── types.hpp            Enums, statusflagg, fn::-hjelpere for <function>-navn
-    │   └── error.hpp            Feilhierarki (ConnectionError, TimeoutError, ScpiError, ...)
-    ├── src/                     Implementasjon av kjernebiblioteket
-    ├── capi/                    C-ABI (fluke_norma_c.h + flukenorma_c delt bibliotek)
-    ├── bindings/python/         pybind11-modul + flukenorma-pakken
-    ├── examples/                C++- og Python-eksempler (identify, U/I/P-måling)
-    ├── tests/                   Catch2-tester: enhetstester (mock-transport) + hardware-tester (ekte TCP)
-    └── cmake/                   Avhengigheter (FetchContent) og pakke-eksport
+    ├── include/fluke/norma/     Public C++ headers
+    │   ├── transport.hpp        Transport abstraction (TCP now; RS-232/USB possible later)
+    │   ├── tcp_transport.hpp    Asio-based TCP transport (port 23, \n-terminated lines)
+    │   ├── scpi_client.hpp      SCPI line protocol: send/query, parsing, error queue
+    │   ├── instrument.hpp       NormaInstrument — high-level facade (typical measurement workflow)
+    │   ├── types.hpp            Enums, status flags, fn:: helpers for <function> names
+    │   └── error.hpp            Error hierarchy (ConnectionError, TimeoutError, ScpiError, ...)
+    ├── src/                     Core library implementation
+    ├── capi/                    C ABI (fluke_norma_c.h + flukenorma_c shared library)
+    ├── bindings/python/         pybind11 module + flukenorma package
+    ├── examples/                C++ and Python examples (identify, U/I/P measurement)
+    ├── tests/                   Catch2 tests: unit tests (mock transport) + hardware tests (real TCP)
+    └── cmake/                   Dependencies (FetchContent) and package exports
 ```
 
-Alle kommandoer i manualen er tilgjengelige via `write()`/`query()`-lukene;
-fasaden dekker standardflyten: `*RST` → `ROUT:SYST` → `SYNC:SOUR` → områder →
+All commands in the manual are accessible through the `write()`/`query()` methods;
+the facade covers the standard workflow: `*RST` → `ROUT:SYST` → `SYNC:SOUR` → ranges →
 `APER` → `FUNC` → `INIT:CONT ON` → `DATA?`/`DATA:STAT?` → `SYST:ERR?`.
 
-## Bygging (C++)
+## Building (C++)
 
-Krav: CMake ≥ 3.24 og en C++17-kompilator (MSVC 2022, GCC, Clang).
-Avhengigheter (Asio, pybind11, Catch2) hentes automatisk ved konfigurering,
-eller brukes fra vcpkg/systemet om de finnes.
+Requirements: CMake ≥ 3.24 and a C++17 compiler (MSVC 2022, GCC, Clang).
+Dependencies (Asio, pybind11, Catch2) are fetched automatically during configuration,
+or taken from vcpkg/the system if available.
 
 ```powershell
 # Windows (Visual Studio 2022)
@@ -52,7 +52,7 @@ cmake --preset windows-msvc
 cmake --build --preset windows-msvc
 ctest --preset windows-msvc
 
-# Windows med Ninja (kjør fra "Developer PowerShell for VS 2022")
+# Windows with Ninja (run from "Developer PowerShell for VS 2022")
 cmake --preset windows-ninja
 cmake --build --preset windows-ninja
 ```
@@ -64,22 +64,22 @@ cmake --build --preset linux
 ctest --preset linux
 ```
 
-CMake-opsjoner: `NORMA_BUILD_PYTHON`, `NORMA_BUILD_C_API`,
-`NORMA_BUILD_EXAMPLES`, `NORMA_BUILD_TESTS`, `NORMA_INSTALL` (alle `ON` som
-standard).
+CMake options: `NORMA_BUILD_PYTHON`, `NORMA_BUILD_C_API`,
+`NORMA_BUILD_EXAMPLES`, `NORMA_BUILD_TESTS`, `NORMA_INSTALL` (all `ON` by
+default).
 
-### Hardware-tester (ekte instrument)
+### Hardware tests (real instrument)
 
-`norma_hardware_tests` kjører mot et ekte NORMA 4000/5000 over TCP (ingen
-mock). Testene hopper over seg selv (Skipped) hvis `NORMA_HOST` ikke er satt,
-så en vanlig `ctest`-kjøring krever ikke instrument.
+`norma_hardware_tests` runs against a real NORMA 4000/5000 over TCP (no
+mock). The tests are skipped (Skipped) if `NORMA_HOST` is not set,
+so a regular `ctest` run does not require an instrument.
 
 ```powershell
 # Windows
-$env:NORMA_HOST = "192.168.1.100"          # NORMA_PORT (23) og NORMA_TIMEOUT_MS (5000) er valgfrie
+$env:NORMA_HOST = "192.168.1.100"          # NORMA_PORT (23) and NORMA_TIMEOUT_MS (5000) are optional
 ctest --preset windows-msvc -L hardware --output-on-failure
 
-# eller kjør binæren direkte:
+# or run the executable directly:
 .\build\windows-msvc\module\tests\Release\norma_hardware_tests.exe
 ```
 
@@ -88,23 +88,23 @@ ctest --preset windows-msvc -L hardware --output-on-failure
 NORMA_HOST=192.168.1.100 ctest --preset linux -L hardware --output-on-failure
 ```
 
-Tester merket `[state]` rekonfigurerer instrumentet (`*RST`, `FUNC`, `APER`,
-...). Kjør kun de lesende testene med:
+Tests tagged `[state]` reconfigure the instrument (`*RST`, `FUNC`, `APER`,
+...). Run only the read-only tests with:
 
 ```
 norma_hardware_tests "[hardware]~[state]"
 ```
 
-### Bruk fra et annet C++-prosjekt
+### Using from another C++ project
 
 ```cmake
-# Alternativ 1: installert pakke
+# Option 1: installed package
 find_package(FlukeNorma REQUIRED)
 target_link_libraries(app PRIVATE FlukeNorma::core)
 
-# Alternativ 2: rett fra kildetreet
+# Option 2: directly from the source tree
 include(FetchContent)
-FetchContent_Declare(FlukeNorma SOURCE_DIR "sti/til/Fluke")
+FetchContent_Declare(FlukeNorma SOURCE_DIR "path/to/Fluke")
 FetchContent_MakeAvailable(FlukeNorma)
 target_link_libraries(app PRIVATE FlukeNorma::core)
 ```
@@ -130,7 +130,7 @@ norma.check_errors();                                   // SYST:ERR?
 ## Python
 
 ```powershell
-pip install .          # bygger C++-kjernen + pybind11-modulen via scikit-build-core
+pip install .          # builds the C++ core + pybind11 module via scikit-build-core
 ```
 
 ```python
@@ -145,14 +145,14 @@ with norma.Norma("192.168.1.100") as instrument:
     print(instrument.data())
 ```
 
-Uten `pip install` kan modulen også importeres rett fra byggekatalogen, f.eks.
-`build/windows-msvc/module/bindings/python/Release` på `PYTHONPATH`.
+Without `pip install`, the module can also be imported directly from the build directory,
+for example by adding `build/windows-msvc/module/bindings/python/Release` to `PYTHONPATH`.
 
-## Andre språk (C-ABI)
+## Other languages (C ABI)
 
-`capi/` bygger `flukenorma_c` (delt bibliotek) med et flatt C-API
+`capi/` builds `flukenorma_c` (a shared library) with a flat C API
 (`fluke_norma_c.h`): `norma_connect`, `norma_write`, `norma_query`,
-`norma_read_data`, `norma_last_error`, `norma_disconnect`. Eksempel (C#):
+`norma_read_data`, `norma_last_error`, `norma_disconnect`. Example (C#):
 
 ```csharp
 [DllImport("flukenorma_c")] static extern int norma_connect(
@@ -161,17 +161,17 @@ Uten `pip install` kan modulen også importeres rett fra byggekatalogen, f.eks.
     IntPtr instrument, string scpi, StringBuilder buffer, UIntPtr size);
 ```
 
-## Design i korte trekk
+## Design overview
 
-- **Lagdeling:** `Transport` (bytes/linjer) → `ScpiClient` (protokoll, parsing,
-  feilkø, trådsikker query) → `NormaInstrument` (typet fasade). Nye transporter
-  (RS-232/USB-VCP) legges til ved å implementere `Transport`.
-- **Timeouts:** all I/O har timeout (standard 5 s, konfigurerbar); `*OPC?` har
-  egen, lengre timeout.
-- **Feil:** nettverksfeil → `ConnectionError`/`TimeoutError`; uforståelige svar
-  → `ProtocolError`; instrumentets egen feilkø (`SYST:ERR?`) → `ScpiError` via
+- **Layers:** `Transport` (bytes/lines) → `ScpiClient` (protocol, parsing,
+  error queue, thread-safe queries) → `NormaInstrument` (typed facade). New transports
+  (RS-232/USB-VCP) can be added by implementing `Transport`.
+- **Timeouts:** all I/O has a timeout (default 5 s, configurable); `*OPC?` has
+  its own, longer timeout.
+- **Errors:** network errors → `ConnectionError`/`TimeoutError`; unrecognized responses
+  → `ProtocolError`; the instrument's error queue (`SYST:ERR?`) → `ScpiError` through
   `check_errors()`.
-- **NaN:** SCPI-representasjonen `9.91E+37` (Undefined/Not available) mappes
-  til `NaN`.
-- **Testbarhet:** enhetstestene kjører mot en skriptet `MockTransport` og
-  verifiserer kommandoformatering og parsing uten instrument.
+- **NaN:** the SCPI representation `9.91E+37` (Undefined/Not available) is mapped
+  to `NaN`.
+- **Testability:** unit tests run against a scripted `MockTransport` and
+  verify command formatting and parsing without an instrument.
