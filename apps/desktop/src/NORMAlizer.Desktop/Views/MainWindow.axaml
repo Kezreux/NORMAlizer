@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:NORMAlizer.Desktop.ViewModels"
+        xmlns:views="using:NORMAlizer.Desktop.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="650"
@@ -33,17 +34,17 @@
             <TextBlock Text="{Binding StatusText}" FontSize="12" />
         </Border>
 
-        <!-- Placeholder content area: application views go here later. -->
-        <ContentControl>
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-                <TextBlock Text="NORMAlizer"
-                           FontSize="28" FontWeight="SemiBold"
-                           HorizontalAlignment="Center" />
-                <TextBlock Text="Fluke NORMA 4000/5000 desktop shell"
-                           Opacity="0.6"
-                           HorizontalAlignment="Center" />
-            </StackPanel>
-        </ContentControl>
+        <TabControl Padding="0">
+            <TabItem Header="Connection">
+                <views:ConnectionView DataContext="{Binding Connection}" />
+            </TabItem>
+            <TabItem Header="Measurements" IsEnabled="{Binding Session.IsConnected}">
+                <views:MeasurementsView DataContext="{Binding Measurements}" />
+            </TabItem>
+            <TabItem Header="SCPI Console" IsEnabled="{Binding Session.IsConnected}">
+                <views:ScpiConsoleView DataContext="{Binding Console}" />
+            </TabItem>
+        </TabControl>
 
     </DockPanel>
 

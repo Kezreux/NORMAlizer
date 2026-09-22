@@ -1,0 +1,55 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:NORMAlizer.Desktop.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="500"
+             x:Class="NORMAlizer.Desktop.Views.MeasurementsView"
+             x:DataType="vm:MeasurementsViewModel">
+
+    <Design.DataContext>
+        <vm:MeasurementsViewModel />
+    </Design.DataContext>
+
+    <DockPanel Margin="24">
+
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12"
+                    Margin="0,0,0,16">
+            <Button Content="Read once" Command="{Binding ReadOnceCommand}" />
+            <ToggleButton Content="Poll every second" IsChecked="{Binding IsPolling}" />
+            <TextBlock Text="{Binding LastReadAt}"
+                       VerticalAlignment="Center" Opacity="0.6" FontSize="12" />
+        </StackPanel>
+
+        <TextBlock DockPanel.Dock="Top"
+                   Text="{Binding ErrorMessage}"
+                   Foreground="{DynamicResource SystemErrorTextColor}"
+                   TextWrapping="Wrap" Margin="0,0,0,8"
+                   IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+        <!-- Header row -->
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="60,240,*" Margin="0,0,0,4">
+            <TextBlock Grid.Column="0" Text="#" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="1" Text="Function" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="2" Text="Value" FontWeight="SemiBold" />
+        </Grid>
+
+        <ScrollViewer>
+            <ItemsControl ItemsSource="{Binding Rows}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:MeasurementRow">
+                        <Grid ColumnDefinitions="60,240,*" Margin="0,2">
+                            <TextBlock Grid.Column="0" Text="{Binding Index}" Opacity="0.6" />
+                            <TextBlock Grid.Column="1" Text="{Binding Function}" />
+                            <TextBlock Grid.Column="2"
+                                       Text="{Binding Value, StringFormat={}{0:G6}}"
+                                       FontFamily="Cascadia Mono,Consolas,Menlo,monospace" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+    </DockPanel>
+
+</UserControl>
