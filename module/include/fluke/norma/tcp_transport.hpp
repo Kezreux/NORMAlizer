@@ -20,8 +20,12 @@ public:
     explicit TcpTransport(std::string host, std::uint16_t port = kDefaultPort);
     ~TcpTransport() override;
 
-    TcpTransport(TcpTransport&&) noexcept;
-    TcpTransport& operator=(TcpTransport&&) noexcept;
+    // Neither copyable nor movable: the pimpl owns a live socket and an
+    // io_context, and a moved-from object would leave every method with a null
+    // impl_ to dereference. Hold it by pointer (as NormaInstrument does, via
+    // std::unique_ptr<Transport>) when it needs to change hands.
+    TcpTransport(TcpTransport&&) = delete;
+    TcpTransport& operator=(TcpTransport&&) = delete;
     TcpTransport(const TcpTransport&) = delete;
     TcpTransport& operator=(const TcpTransport&) = delete;
 

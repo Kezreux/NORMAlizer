@@ -13,6 +13,9 @@ option(NORMA_BUILD_PYTHON   "Build the pybind11 Python bindings"          ON)
 option(NORMA_BUILD_C_API    "Build the C ABI shared library (for FFI)"    ON)
 option(NORMA_BUILD_EXAMPLES "Build the C++ examples"                      ON)
 option(NORMA_BUILD_TESTS    "Build the unit tests"                        ON)
+option(NORMA_BUILD_SIMULATOR
+       "Build the offline instrument simulator (FlukeNorma::simulator, norma_sim)"
+       ON)
 option(NORMA_INSTALL        "Generate install/export targets"             ON)
 
 if(NOT CMAKE_CXX_STANDARD)
@@ -41,6 +44,16 @@ endif()
 
 if(NORMA_BUILD_EXAMPLES)
     add_subdirectory(module/examples)
+endif()
+
+# The tests drive the library against the simulator, so it is required for them.
+if(NORMA_BUILD_TESTS AND NOT NORMA_BUILD_SIMULATOR)
+    message(STATUS "NORMA_BUILD_TESTS is ON: enabling NORMA_BUILD_SIMULATOR, which the tests need")
+    set(NORMA_BUILD_SIMULATOR ON)
+endif()
+
+if(NORMA_BUILD_SIMULATOR)
+    add_subdirectory(module/simulator)
 endif()
 
 if(NORMA_BUILD_TESTS)

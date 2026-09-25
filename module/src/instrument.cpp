@@ -1,3 +1,7 @@
+// NormaInstrument: lifecycle, IEEE 488.2 common commands, STATus and errors.
+// The configuration subsystems live in instrument_config.cpp and the
+// measurement/acquisition ones in instrument_data.cpp.
+
 #include "fluke/norma/instrument.hpp"
 
 #include <stdexcept>
@@ -5,23 +9,9 @@
 
 #include "fluke/norma/error.hpp"
 #include "fluke/norma/tcp_transport.hpp"
+#include "scpi_keywords.hpp"
 
 namespace fluke::norma {
-
-namespace {
-
-std::string join_quoted(const std::vector<std::string>& functions) {
-    std::string list;
-    for (std::size_t i = 0; i < functions.size(); ++i) {
-        if (i != 0) {
-            list += ',';
-        }
-        list += ScpiClient::quote(functions[i]);
-    }
-    return list;
-}
-
-} // namespace
 
 NormaInstrument::NormaInstrument(std::unique_ptr<Transport> transport,
                                  std::chrono::milliseconds timeout)
@@ -38,6 +28,17 @@ NormaInstrument NormaInstrument::connect(std::string host, std::uint16_t port,
 
 void NormaInstrument::close() { scpi_->close(); }
 bool NormaInstrument::is_open() const { return scpi_->is_open(); }
+
+void NormaInstrument::prepare() {
+    clear_status();
+    // This library parses ASCII responses only, and FORMat survives a
+    // disconnect: a previous session may have left the instrument in REAL,64,
+    // which would turn every measurement query into a binary block.
+    set_data_format(DataFormat::Ascii, 6);
+    set_concurrent(true);
+    // Whatever the previous session left queued is not ours to report.
+    read_errors();
+}
 
 // -- Raw SCPI ----------------------------------------------------------------
 
@@ -60,7 +61,7 @@ Identification NormaInstrument::identify() {
 void NormaInstrument::reset() { scpi_->send("*RST"); }
 void NormaInstrument::clear_status() { scpi_->send("*CLS"); }
 std::string NormaInstrument::options() { return scpi_->query("*OPT?"); }
-std::string NormaInstrument::scpi_version() { return scpi_->query("SYST:VERS?"); }
+std::string NormaInstrument::learn() { return scpi_->query("*LRN?"); }
 
 void NormaInstrument::wait_operation_complete(std::chrono::milliseconds timeout) {
     const std::string response = scpi_->query("*OPC?", timeout);
@@ -69,127 +70,89 @@ void NormaInstrument::wait_operation_complete(std::chrono::milliseconds timeout)
     }
 }
 
+void NormaInstrument::set_operation_complete_flag() { scpi_->send("*OPC"); }
+void NormaInstrument::wait_pending_operations() { scpi_->send("*WAI"); }
 void NormaInstrument::trigger() { scpi_->send("*TRG"); }
 
-// -- Configuration -------------------------------------------------------------
-
-void NormaInstrument::set_wiring_system(WiringSystem system) {
-    scpi_->send(system == WiringSystem::TwoWattmeter ? "ROUT:SYST \"2W\""
-                                                     : "ROUT:SYST \"3W\"");
+void NormaInstrument::set_event_status_enable(int mask) {
+    scpi_->send("*ESE " + std::to_string(mask));
 }
 
-WiringSystem NormaInstrument::wiring_system() {
-    const std::string response = ScpiClient::unquote(scpi_->query("ROUT:SYST?"));
-    if (response == "2W") return WiringSystem::TwoWattmeter;
-    if (response == "3W") return WiringSystem::ThreeWattmeter;
-    throw ProtocolError("unexpected ROUT:SYST? response: \"" + response + "\"");
+int NormaInstrument::event_status_enable() { return scpi_->query_int("*ESE?"); }
+int NormaInstrument::event_status() { return scpi_->query_int("*ESR?"); }
+
+void NormaInstrument::set_service_request_enable(int mask) {
+    scpi_->send("*SRE " + std::to_string(mask));
 }
 
-void NormaInstrument::set_sync_source(std::string_view source) {
-    scpi_->send("SYNC:SOUR " + std::string(source));
-}
+int NormaInstrument::service_request_enable() { return scpi_->query_int("*SRE?"); }
+int NormaInstrument::status_byte() { return scpi_->query_int("*STB?"); }
 
-void NormaInstrument::sync_to_voltage(int phase) {
-    check_phase(phase);
-    set_sync_source("VOLT" + std::to_string(phase));
-}
-
-void NormaInstrument::sync_to_current(int phase) {
-    check_phase(phase);
-    set_sync_source("CURR" + std::to_string(phase));
-}
-
-void NormaInstrument::sync_external() { set_sync_source("EXT"); }
-
-void NormaInstrument::set_voltage_range(int phase, double volts) {
-    check_phase(phase);
-    scpi_->send("VOLT" + std::to_string(phase) + ":RANG " + ScpiClient::format_double(volts));
-}
-
-void NormaInstrument::set_voltage_autorange(int phase, bool on) {
-    check_phase(phase);
-    scpi_->send("VOLT" + std::to_string(phase) + ":RANG:AUTO " + (on ? "ON" : "OFF"));
-}
-
-void NormaInstrument::set_current_range(int phase, double amps) {
-    check_phase(phase);
-    scpi_->send("CURR" + std::to_string(phase) + ":RANG " + ScpiClient::format_double(amps));
-}
-
-void NormaInstrument::set_current_autorange(int phase, bool on) {
-    check_phase(phase);
-    scpi_->send("CURR" + std::to_string(phase) + ":RANG:AUTO " + (on ? "ON" : "OFF"));
-}
-
-void NormaInstrument::set_aperture(double seconds) {
-    scpi_->send("APER " + ScpiClient::format_double(seconds));
-}
-
-double NormaInstrument::aperture() { return scpi_->query_value("APER?"); }
-
-void NormaInstrument::set_functions(const std::vector<std::string>& functions) {
-    if (functions.empty()) {
-        throw std::invalid_argument("set_functions: the function list must not be empty "
-                                    "(use clear_functions() to turn all off)");
+void NormaInstrument::save_setup(int slot) {
+    // The manual allows *SAV 10..24; 1 and 2 are read-only factory setups.
+    if (slot < 10 || slot > 24) {
+        throw std::invalid_argument("*SAV slot must be 10..24, got " + std::to_string(slot));
     }
-    scpi_->send("FUNC " + join_quoted(functions));
+    scpi_->send("*SAV " + std::to_string(slot));
 }
 
-std::vector<std::string> NormaInstrument::functions() {
-    std::vector<std::string> result;
-    for (const auto& field : ScpiClient::split_csv(scpi_->query("FUNC?"))) {
-        result.push_back(ScpiClient::unquote(field));
+void NormaInstrument::recall_setup(int slot) {
+    if (slot != 1 && slot != 2 && (slot < 10 || slot > 24)) {
+        throw std::invalid_argument("*RCL slot must be 1, 2 or 10..24, got " +
+                                    std::to_string(slot));
     }
-    return result;
+    scpi_->send("*RCL " + std::to_string(slot));
 }
 
-int NormaInstrument::function_count() { return scpi_->query_int("FUNC:COUN?"); }
+// -- STATus --------------------------------------------------------------------
 
-void NormaInstrument::clear_functions() { scpi_->send("FUNC:OFF:ALL"); }
-
-// -- Acquisition ----------------------------------------------------------------
-
-void NormaInstrument::set_continuous(bool on) {
-    scpi_->send(on ? "INIT:CONT ON" : "INIT:CONT OFF");
-}
-
-void NormaInstrument::initiate() { scpi_->send("INIT"); }
-void NormaInstrument::abort() { scpi_->send("ABOR"); }
-
-std::vector<double> NormaInstrument::data(const std::vector<std::string>& functions) {
-    if (functions.empty()) {
-        return scpi_->query_values("DATA?");
+std::string NormaInstrument::status_node(StatusRegister reg, RegisterPart part) {
+    std::string node = "STAT:";
+    switch (reg) {
+    case StatusRegister::Operation:           node += "OPER"; break;
+    case StatusRegister::Questionable:        node += "QUES"; break;
+    case StatusRegister::QuestionableVoltage: node += "QUES:VOLT"; break;
+    case StatusRegister::QuestionableCurrent: node += "QUES:CURR"; break;
     }
-    return scpi_->query_values("DATA? " + join_quoted(functions));
+    switch (part) {
+    case RegisterPart::Condition:          node += ":COND"; break;
+    case RegisterPart::Event:              node += ":EVEN"; break;
+    case RegisterPart::Enable:             node += ":ENAB"; break;
+    case RegisterPart::PositiveTransition: node += ":PTR"; break;
+    case RegisterPart::NegativeTransition: node += ":NTR"; break;
+    }
+    return node;
 }
 
-Reading NormaInstrument::data_with_status(const std::vector<std::string>& functions) {
-    const std::string command =
-        functions.empty() ? std::string("DATA:STAT?") : "DATA:STAT? " + join_quoted(functions);
-    const auto raw = scpi_->query_values(command);
-    if (raw.size() % 2 != 0) {
-        throw ProtocolError("DATA:STAT? returned an odd number of fields (" +
-                            std::to_string(raw.size()) + ")");
-    }
-
-    Reading reading;
-    const std::size_t count = raw.size() / 2;
-    reading.values.assign(raw.begin(), raw.begin() + count);
-    reading.status.reserve(count);
-    for (std::size_t i = count; i < raw.size(); ++i) {
-        reading.status.push_back(static_cast<int>(raw[i]));
-    }
-    return reading;
+int NormaInstrument::status(StatusRegister reg, RegisterPart part) {
+    return scpi_->query_int(status_node(reg, part) + "?");
 }
 
-// -- Errors & status --------------------------------------------------------------
-
-std::vector<ScpiErrorInfo> NormaInstrument::read_errors() { return scpi_->read_all_errors(); }
-void NormaInstrument::check_errors() { scpi_->throw_if_error(); }
+void NormaInstrument::set_status(StatusRegister reg, RegisterPart part, int mask) {
+    if (part == RegisterPart::Condition || part == RegisterPart::Event) {
+        throw std::invalid_argument(
+            "the CONDition and EVENt parts of a status register are read-only");
+    }
+    if (mask < 0 || mask > 65535) {
+        throw std::invalid_argument("status register mask must be 0..65535, got " +
+                                    std::to_string(mask));
+    }
+    scpi_->send(status_node(reg, part) + " " + std::to_string(mask));
+}
 
 int NormaInstrument::status_operation_condition() {
-    return scpi_->query_int("STAT:OPER:COND?");
+    return status(StatusRegister::Operation, RegisterPart::Condition);
 }
+
+// -- Errors ---------------------------------------------------------------------
+
+std::vector<ScpiErrorInfo> NormaInstrument::read_errors() { return scpi_->read_all_errors(); }
+
+std::vector<ScpiErrorInfo> NormaInstrument::read_errors_at_once() {
+    return ScpiClient::parse_errors(scpi_->query("SYST:ERR:ALL?"));
+}
+
+void NormaInstrument::check_errors() { scpi_->throw_if_error(); }
 
 // -- Plumbing ---------------------------------------------------------------------
 
@@ -201,10 +164,42 @@ std::chrono::milliseconds NormaInstrument::timeout() const {
     return scpi_->default_timeout();
 }
 
+// -- Shared private helpers ---------------------------------------------------------
+
 void NormaInstrument::check_phase(int phase) {
-    if (phase < 1 || phase > 6) {
-        throw std::invalid_argument("phase must be 1..6, got " + std::to_string(phase));
+    if (phase < 1 || phase > kMaxPhase) {
+        throw std::invalid_argument("phase must be 1.." + std::to_string(kMaxPhase) + ", got " +
+                                    std::to_string(phase));
     }
+}
+
+void NormaInstrument::check_channel(int channel) {
+    if (channel < 1 || channel > kMaxInputChannel) {
+        throw std::invalid_argument("input channel must be 1.." +
+                                    std::to_string(kMaxInputChannel) + ", got " +
+                                    std::to_string(channel));
+    }
+}
+
+std::string NormaInstrument::sense_node(const char* base, int phase) {
+    check_phase(phase);
+    return std::string(base) + std::to_string(phase);
+}
+
+std::string NormaInstrument::data_arguments(int count, int offset, int sparsing) {
+    // The manual's data queries take positional optional arguments, so an
+    // argument can only be given when every argument before it is.
+    if (count <= 0) {
+        return {};
+    }
+    std::string args = " " + std::to_string(count);
+    if (offset > 0 || sparsing > 0) {
+        args += "," + std::to_string(offset);
+    }
+    if (sparsing > 0) {
+        args += "," + std::to_string(sparsing);
+    }
+    return args;
 }
 
 } // namespace fluke::norma

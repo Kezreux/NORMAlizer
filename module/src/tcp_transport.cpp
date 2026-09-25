@@ -48,9 +48,6 @@ TcpTransport::~TcpTransport() {
     }
 }
 
-TcpTransport::TcpTransport(TcpTransport&&) noexcept = default;
-TcpTransport& TcpTransport::operator=(TcpTransport&&) noexcept = default;
-
 void TcpTransport::open() {
     auto& im = *impl_;
     if (im.socket.is_open()) {

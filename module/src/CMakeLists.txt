@@ -2,7 +2,10 @@
 add_library(norma_core
     tcp_transport.cpp
     scpi_client.cpp
-    instrument.cpp)
+    scpi_keywords.cpp
+    instrument.cpp
+    instrument_config.cpp
+    instrument_data.cpp)
 add_library(FlukeNorma::core ALIAS norma_core)
 
 # Public headers live in module/include (one level above this directory).
