@@ -30,8 +30,4 @@ target_link_libraries(norma_core PUBLIC
     $<$<PLATFORM_ID:Windows>:ws2_32>
     $<$<PLATFORM_ID:Windows>:mswsock>)
 
-if(MSVC)
-    target_compile_options(norma_core PRIVATE /W4)
-else()
-    target_compile_options(norma_core PRIVATE -Wall -Wextra -Wpedantic)
-endif()
+norma_enable_warnings(norma_core)

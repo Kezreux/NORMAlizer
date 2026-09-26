@@ -27,12 +27,9 @@ set_target_properties(norma_simulator PROPERTIES
     OUTPUT_NAME flukenorma_simulator
     POSITION_INDEPENDENT_CODE ON)
 
-if(MSVC)
-    target_compile_options(norma_simulator PRIVATE /W4)
-else()
-    target_compile_options(norma_simulator PRIVATE -Wall -Wextra -Wpedantic)
-endif()
+norma_enable_warnings(norma_simulator)
 
 # The standalone simulator process.
 add_executable(norma_sim src/main.cpp)
 target_link_libraries(norma_sim PRIVATE FlukeNorma::simulator)
+norma_enable_warnings(norma_sim)

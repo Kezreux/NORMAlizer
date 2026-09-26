@@ -58,11 +58,6 @@ catch_discover_tests(norma_simulated_tests
         LABELS "simulator"
         ENVIRONMENT "NORMA_HOST=simulator")
 
-if(MSVC)
-    set(norma_test_warnings /W4)
-else()
-    set(norma_test_warnings -Wall -Wextra -Wpedantic)
-endif()
 foreach(target IN ITEMS norma_tests norma_hardware_tests norma_simulated_tests)
-    target_compile_options(${target} PRIVATE ${norma_test_warnings})
+    norma_enable_warnings(${target})
 endforeach()

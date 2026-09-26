@@ -17,6 +17,7 @@ option(NORMA_BUILD_SIMULATOR
        "Build the offline instrument simulator (FlukeNorma::simulator, norma_sim)"
        ON)
 option(NORMA_INSTALL        "Generate install/export targets"             ON)
+option(NORMA_WERROR         "Treat warnings as errors in this project's own targets" OFF)
 
 if(NOT CMAKE_CXX_STANDARD)
     set(CMAKE_CXX_STANDARD 17)
@@ -31,6 +32,7 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/module/cmake")
 include(Dependencies)
+include(Warnings)
 
 add_subdirectory(module/src)
 

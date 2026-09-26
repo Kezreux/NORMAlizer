@@ -4,10 +4,16 @@
 //   *RST -> ROUT:SYST "3W" -> SYNC:SOUR VOLT1 -> ranges -> APER 1.0
 //        -> FUNC "VOLT1","CURR1","POW1:ACT" -> INIT:CONT ON -> DATA?
 //
-// Usage: norma_simple_power [host]
+// Usage: norma_simple_power [host] [port]
+//
+// With no instrument on the bench, start the simulator and point this at it:
+//
+//   norma_sim --port 2300
+//   norma_simple_power 127.0.0.1 2300
 
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <string>
 #include <thread>
@@ -18,11 +24,17 @@ int main(int argc, char** argv) {
     using namespace fluke::norma;
 
     const std::string host = argc > 1 ? argv[1] : "192.168.1.100";
+    const auto port = static_cast<std::uint16_t>(argc > 2 ? std::atoi(argv[2]) : kDefaultPort);
 
     try {
-        auto norma = NormaInstrument::connect(host);
+        auto norma = NormaInstrument::connect(host, port);
         std::printf("Connected to %s\n", norma.identify().model.c_str());
 
+        // The transfer format and the concurrency flag survive a disconnect, so
+        // a previous session could have left the instrument answering in a
+        // binary format. prepare() puts that right without touching the
+        // measurement configuration.
+        norma.prepare();
         norma.reset();
         norma.set_wiring_system(WiringSystem::ThreeWattmeter);
         norma.sync_to_voltage(1);

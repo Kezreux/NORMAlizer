@@ -24,6 +24,7 @@ Example::
 
     with Norma.connect("192.168.1.100") as norma:
         print(norma.identify())
+        norma.prepare()          # ASCII transfer format, concurrent, clean queue
         norma.reset()
         norma.wiring_system = WiringSystem.THREE_WATTMETER
         norma.sync_to_voltage(1)
@@ -31,7 +32,7 @@ Example::
         norma.set_current_autorange(1)
         norma.aperture = 1.0
         norma.functions = [fn.voltage(1), fn.current(1), fn.active_power(1)]
-        norma.set_continuous(True)
+        norma.continuous = True
         time.sleep(2)
         for measurement in norma.read():
             print(measurement.function, measurement.value, measurement.status)
@@ -39,22 +40,54 @@ Example::
 
 from . import fn
 from ._bootstrap import core as _core
-from ._norma import DEFAULT_PORT, Norma
+from ._norma import (
+    DEFAULT_PORT,
+    MAX_APERTURE,
+    MAX_INPUT_CHANNEL,
+    MAX_PHASE,
+    MIN_APERTURE,
+    Norma,
+)
 from ._protocols import (
     CoreEnumLike,
+    DataFormatSettingLike,
+    DataPreambleLike,
+    DateLike,
     IdentificationLike,
     NormaLike,
     ReadingLike,
     ScpiErrorInfoLike,
+    TimeLike,
 )
 from ._types import (
+    ByteOrder,
+    ChannelStatus,
     Coupling,
+    DataFormat,
+    DataFormatSetting,
+    DataPreamble,
+    Date,
+    HarmonicGrouping,
     Identification,
+    IntegralStartSource,
+    IntegralStopSource,
+    KeyLock,
+    LevelUnit,
     Measurement,
     MeasurementStatus,
+    OperationStatus,
+    PowerCorrection,
+    QuestionableStatus,
     Reading,
+    RegisterPart,
     ScpiErrorInfo,
     Shunt,
+    Slope,
+    StatusByte,
+    StatusRegister,
+    SweepBlock,
+    Time,
+    TransformMode,
     WiringSystem,
 )
 
@@ -72,6 +105,10 @@ __version__: str = _core.__version__
 __all__ = [
     # Instrument
     "DEFAULT_PORT",
+    "MAX_APERTURE",
+    "MAX_INPUT_CHANNEL",
+    "MAX_PHASE",
+    "MIN_APERTURE",
     "Norma",
     "fn",
     # Exceptions
@@ -80,20 +117,47 @@ __all__ = [
     "TimeoutError",
     "ProtocolError",
     "ScpiError",
-    # Value types & enums
-    "Coupling",
+    # Value types
+    "DataFormatSetting",
+    "DataPreamble",
+    "Date",
     "Identification",
     "Measurement",
-    "MeasurementStatus",
     "Reading",
     "ScpiErrorInfo",
+    "Time",
+    # Enums
+    "ByteOrder",
+    "Coupling",
+    "DataFormat",
+    "HarmonicGrouping",
+    "IntegralStartSource",
+    "IntegralStopSource",
+    "KeyLock",
+    "LevelUnit",
+    "PowerCorrection",
+    "RegisterPart",
     "Shunt",
+    "Slope",
+    "StatusRegister",
+    "SweepBlock",
+    "TransformMode",
     "WiringSystem",
+    # Status bit flags
+    "ChannelStatus",
+    "MeasurementStatus",
+    "OperationStatus",
+    "QuestionableStatus",
+    "StatusByte",
     # Protocols (structural types for the compiled objects / test fakes)
     "CoreEnumLike",
+    "DataFormatSettingLike",
+    "DataPreambleLike",
+    "DateLike",
     "IdentificationLike",
     "NormaLike",
     "ReadingLike",
     "ScpiErrorInfoLike",
+    "TimeLike",
     "__version__",
 ]

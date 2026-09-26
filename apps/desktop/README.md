@@ -9,7 +9,7 @@ over TCP/SCPI. Talks to the instrument through the native `flukenorma_c` library
 | Project | Purpose |
 | --- | --- |
 | `src/NORMAlizer.Desktop` | Avalonia UI (MVVM, CommunityToolkit) |
-| `src/NORMAlizer.Interop` | P/Invoke bindings for `flukenorma_c` |
+| `src/NORMAlizer.Interop` | P/Invoke bindings for `flukenorma_c` (see [`fluke_norma_c.h`](../../module/capi/include/fluke_norma_c.h) for the full C surface) |
 | `src/NORMAlizer.Core` | Shared domain logic (currently empty) |
 | `tests/NORMAlizer.Core.Tests` | xUnit tests |
 
@@ -52,11 +52,45 @@ dotnet run --project src/NORMAlizer.Desktop      # start the app
 Without a native library the app still starts; the Connection tab reports that
 `flukenorma_c` was not found.
 
+## Develop without an analyzer
+
+The repository ships a simulated NORMA, so the UI can be built and driven end to
+end with no instrument on the bench. Build and start it, then connect the app to
+the host and port it prints:
+
+```sh
+# from the repository root
+cmake --build build/linux --target norma_sim
+./build/linux/module/simulator/norma_sim --port 2300 --verbose
+```
+
+```
+listening on 127.0.0.1:2300
+identifies as Fluke,NORMA5000,KN34512BA,01.05
+```
+
+It speaks the real protocol — the same SCPI grammar, the same error codes, the
+same `DATA?` response format — so nothing in the app needs to know it is not an
+analyzer. `--verbose` logs each connection and command count, which is handy when
+a view is sending more round-trips than you expected.
+
+The SCPI console tab is worth pointing at it first: an unknown command comes back
+as `-113 "Undefined header"` from the simulator exactly as it would from the
+instrument, so error handling can be built against real behaviour.
+
+See [`module/simulator/README.md`](../../module/simulator/README.md) for what it
+models, and how to set up a signal so the measurement views show plausible values.
+
 ## Test
 
 ```sh
 dotnet test
 ```
+
+> **Note:** the test project currently references `NORMAlizer.Core`, which is
+> empty — so `NORMAlizer.Interop`, the layer that actually matters, has no
+> coverage. Adding that is on the [roadmap](../../README.md#roadmap); the
+> simulator above is what such tests would run against.
 
 ## Publish
 

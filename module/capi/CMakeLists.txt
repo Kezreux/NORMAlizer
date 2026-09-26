@@ -14,8 +14,4 @@ set_target_properties(norma_c PROPERTIES
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON)
 
-if(MSVC)
-    target_compile_options(norma_c PRIVATE /W4)
-else()
-    target_compile_options(norma_c PRIVATE -Wall -Wextra -Wpedantic)
-endif()
+norma_enable_warnings(norma_c)

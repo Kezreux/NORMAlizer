@@ -32,6 +32,7 @@ from flukenorma import Norma, WiringSystem, fn
 with Norma.connect("192.168.1.100", timeout=5.0) as norma:
     print(norma.identify())            # Identification(manufacturer='Fluke', model='NORMA4000', ...)
 
+    norma.prepare()                    # ASCII transfer format, concurrent, clean queue
     norma.reset()
     norma.wiring_system = WiringSystem.THREE_WATTMETER
     norma.sync_to_voltage(1)
@@ -40,7 +41,7 @@ with Norma.connect("192.168.1.100", timeout=5.0) as norma:
     norma.aperture = 1.0               # seconds of averaging
 
     norma.functions = [fn.voltage(1), fn.current(1), fn.active_power(1)]
-    norma.set_continuous(True)
+    norma.continuous = True
     time.sleep(2)
 
     for m in norma.read():
@@ -60,6 +61,7 @@ with Norma.connect("192.168.1.100", timeout=5.0) as norma:
 | A bare list of floats | `Reading` — iterate, index, or look up by name |
 | Integer status bits | `MeasurementStatus` (`IntFlag`) + `Measurement.is_valid` |
 | Manual `close()` | `with Norma.connect(...) as norma:` |
+| Raw register integers | `OperationStatus`, `QuestionableStatus`, `ChannelStatus` (`IntFlag`) |
 
 ### Readings that label themselves
 
@@ -78,9 +80,26 @@ reading["POW1:ACT"].status    # <MeasurementStatus.NORMAL: 0>
 `12/23/31` = phase-to-phase, `0` (default) = total/average:
 
 ```python
-fn.voltage(1)        # "VOLT1"       fn.apparent_power(0)  # "POW:APP"
-fn.current_ac(2)     # "CURR2:AC"    fn.power_factor(1)    # "POW1:FACT"
-fn.voltage_mean(31)  # "VOLT31:MEAN" fn.frequency()        # "FREQ"
+fn.voltage(1)             # "VOLT1"        fn.apparent_power()      # "POW:APP"
+fn.current_ac(2)          # "CURR2:AC"     fn.power_factor(1)       # "POW1:FACT"
+fn.voltage_line_mean(31)  # "VOLT31:MEAN"  fn.frequency()           # "FREQ"
+fn.voltage_thd(1)         # "VOLT1:THD"    fn.series_reactance(1)   # "REACT1:SER"
+```
+
+The whole function table is covered, and the trailing modifiers compose::
+
+```python
+fn.harmonic(fn.active_power(1))   # "POW1:ACT:HAR"  — order set by norma.harmonic_order
+fn.minimum(fn.voltage(1))         # "VOLT1:MIN"
+fn.integral(fn.active_power())    # "POW:ACT:INT"   — needs norma.integral_enabled
+```
+
+A suffix the manual does not define raises `ValueError` here rather than coming
+back from the instrument as SCPI error -113:
+
+```python
+fn.voltage(99)        # ValueError: invalid phase suffix for function "VOLT": 99
+fn.voltage(12)        # ValueError — phase-to-phase belongs to fn.voltage_line()
 ```
 
 ### Errors
@@ -100,8 +119,21 @@ deliberately shadow the builtins to mirror the binding.
 
 ### Testing without hardware
 
-`Norma` accepts anything satisfying the `NormaLike` protocol, so a hand-written
-fake drops straight in:
+The repository ships a simulated instrument. Start it and connect as usual —
+it speaks the real protocol, so the code under test needs no changes:
+
+```bash
+./build/linux-make/module/simulator/norma_sim --port 2300
+```
+
+```python
+with Norma.connect("127.0.0.1", 2300) as norma:
+    norma.functions = [fn.voltage(1), fn.current(1), fn.active_power(1)]
+    print(norma.read())
+```
+
+For a unit test with no process at all, `Norma` accepts anything satisfying the
+`NormaLike` protocol, so a hand-written fake drops straight in:
 
 ```python
 norma = Norma(FakeInstrument())        # no instrument, no network, still typed
@@ -113,13 +145,20 @@ Nothing is locked away — every command in the manual is one call away:
 
 ```python
 norma.write("SENS:FUNC:ON 'VOLT1'")
+norma.write("INP1:SHUN EXT;GAIN 25.0")  # a ';'-separated command line
 norma.query("*IDN?")
-norma.instrument                       # the raw compiled object
+norma.instrument                        # the raw compiled object
 ```
+
+A string containing a line terminator is refused with `ValueError`: it would put
+a second command on the wire whose response nobody reads, leaving every later
+query one answer behind.
 
 ## Reference
 
-* Protocol: [`docs/Fluke-NORMA-TCP-API.md`](../docs/Fluke-NORMA-TCP-API.md)
-* C++ core, C ABI and bindings: [`module/README.md`](../module/README.md)
+* Protocol: [`docs/Fluke-NORMA-TCP-API.md`](../../docs/Fluke-NORMA-TCP-API.md)
+* C++ core, C ABI and bindings: [`module/README.md`](../../module/README.md)
+* The simulated instrument: [`module/simulator/README.md`](../../module/simulator/README.md)
+* Project overview and roadmap: [`README.md`](../../README.md)
 
 MIT licensed.

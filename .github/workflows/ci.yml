@@ -1,0 +1,175 @@
+# Builds and tests the C++ library, the simulator and the Python bindings.
+#
+# Until now nothing in this repository was verified automatically — publish.yml
+# only builds wheels — so a change could break the build or the protocol handling
+# and only be noticed on someone's bench. Every job here runs without an
+# instrument: the tests drive the library against the built-in simulator
+# (module/simulator), including over a real loopback socket.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch supersedes the previous run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: ${{ matrix.os }} ${{ matrix.build_type }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        build_type: [Debug, Release]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The default generator is used on purpose: Visual Studio on Windows and
+      # Unix Makefiles on Linux, so no extra tool has to be installed. Asio,
+      # Catch2 and pybind11 are fetched by Dependencies.cmake.
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_type }} --parallel
+
+      # Runs the unit tests, the simulator's own tests, the in-process
+      # integration tests, the loopback TCP tests and the instrument suite
+      # pointed at the simulator. The hardware-labelled tests skip themselves
+      # because NORMA_HOST is unset.
+      - name: Test
+        run: ctest --test-dir build --build-config ${{ matrix.build_type }} --output-on-failure
+
+      - name: Check that the hardware suite is registered but skipped
+        shell: bash
+        run: |
+          count=$(ctest --test-dir build -N -L hardware | tail -1)
+          echo "$count"
+          case "$count" in
+            "Total Tests: 0") echo "::error::the hardware tests are not registered"; exit 1 ;;
+          esac
+
+  sanitizers:
+    name: ASan + UBSan (clang)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # This is the configuration that catches the lifetime and aliasing
+      # mistakes the assertions cannot see — the transport owns a socket and an
+      # io_context behind a pimpl, and the simulator's server runs its own thread.
+      - name: Configure
+        env:
+          CC: clang
+          CXX: clang++
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DNORMA_BUILD_PYTHON=OFF
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        env:
+          UBSAN_OPTIONS: print_stacktrace=1
+        run: ctest --test-dir build --output-on-failure
+
+  warnings:
+    name: Warnings as errors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DNORMA_BUILD_PYTHON=OFF
+          -DNORMA_WERROR=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+  python:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest version pyproject.toml supports, and a current one.
+        python-version: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build and install the wheel
+        run: python -m pip install --verbose .
+
+      # Imports the package and walks its public surface: the compiled extension
+      # has to be loadable, and every name the package promises has to exist.
+      - name: Smoke test
+        run: |
+          python - <<'PY'
+          import enum
+          import flukenorma as F
+          import flukenorma._core as core
+
+          print("flukenorma", F.__version__)
+
+          missing = [name for name in F.__all__ if not hasattr(F, name)]
+          assert not missing, f"__all__ names missing from the package: {missing}"
+
+          # Every method the NormaLike protocol promises must exist on the
+          # compiled instrument class, or the typed facade would call into a hole.
+          protocol = [n for n in dir(F.NormaLike) if not n.startswith("_")]
+          absent = [n for n in protocol if not hasattr(core.Norma, n)]
+          assert not absent, f"NormaLike members absent on _core.Norma: {absent}"
+          assert len(protocol) > 100, f"only {len(protocol)} protocol members found"
+
+          # The enums are bridged to the extension by member name.
+          for name in dir(F):
+              value = getattr(F, name)
+              if isinstance(value, type) and issubclass(value, enum.Enum) and hasattr(core, name):
+                  for member in value:
+                      assert hasattr(getattr(core, name), member.name), \
+                          f"{name}.{member.name} has no counterpart in _core"
+
+          # The function-name grammar, including its validation.
+          assert F.fn.active_power(1) == "POW1:ACT"
+          assert F.fn.reactive_power(1) == "POW1:REAC"
+          assert F.fn.series_reactance(1) == "REACT1:SER"
+          assert F.fn.minimum(F.fn.voltage(1)) == "VOLT1:MIN"
+          try:
+              F.fn.voltage(99)
+          except ValueError:
+              pass
+          else:
+              raise AssertionError("an undefined phase suffix was accepted")
+
+          # An unnamed status bit must survive rather than raise (Python 3.9
+          # has no IntFlag boundary=KEEP).
+          assert int(F.MeasurementStatus(4)) == 4
+          assert int(F.MeasurementStatus(129)) == 129
+
+          print("surface:", len(F.__all__), "exports,", len(protocol), "protocol members")
+          print("OK")
+          PY
