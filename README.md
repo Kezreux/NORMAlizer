@@ -108,9 +108,8 @@ The .NET SDK is needed for the desktop app, which is not wired up yet.
 | [`python/flukenorma/README.md`](python/flukenorma/README.md) | The Python package |
 | [`apps/desktop/README.md`](apps/desktop/README.md) | The desktop application |
 
-The protocol reference is compiled from the *Fluke NORMA 4000/5000 Remote Control
-Users Guide* (June 2007, Rev. 2). Its prose is in Norwegian; the SCPI commands and
-code examples are of course language-neutral.
+The protocol reference is compiled and translated from the *Fluke NORMA 4000/5000
+Remote Control Users Guide* (June 2007, Rev. 2).
 
 If all you want is to talk to an analyzer right now:
 
